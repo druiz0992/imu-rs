@@ -1,0 +1,16 @@
+[workspace]
+members = ["publisher", "common", "resampler", "phyphox-rs"]
+resolver = "2"
+
+[profile.dev]
+opt-level = 3
+
+
+[workspace.dependencies]
+tokio = {version = "1.29.1", features = ["full"]}
+uuid = { version = "1", features = ["v4"] }
+log = "0.4"
+env_logger = "0.10"
+nalgebra = "0.33.2"
+
+[workspace.dev-dependencies]

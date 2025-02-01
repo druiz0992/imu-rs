@@ -1,0 +1,10 @@
+Cargo.lock
+
+target/
+
+**/target/
+**/Cargo.lock
+
+.vscode/
+.idea/
+*.swp
