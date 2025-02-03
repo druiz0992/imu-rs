@@ -3,7 +3,7 @@ use serde_json::Value;
 use common::constants::N_XYZ_COORDINATES;
 use common::types::XYZ;
 
-use super::errors::PhyphoxError;
+use crate::models::errors::PhyphoxError;
 
 const ACC_VARIABLES: [&str; N_XYZ_COORDINATES] = ["accX", "accY", "accZ"];
 const ACC_TIME: &str = "acc_time";
@@ -17,7 +17,6 @@ const MEASURING: &str = "measuring";
 const BUFFER: &str = "buffer";
 
 const EPS_MEASUREMENT_TIME: f64 = 10e-5;
-const TIMESTAMP_COORD_IDX: usize = 0;
 
 pub(crate) fn control_str(
     sensor: usize,
@@ -87,16 +86,17 @@ pub(crate) fn parse_results(
 /// output[2] : [x[1], y[1]]
 /// ...
 pub(crate) fn combine_results(results: Vec<Vec<f64>>) -> (Vec<f64>, Vec<XYZ>) {
-    let row_count = results[0].len().min(4);
+    let row_count = results.len().min(4);
 
     let n_samples = results[0].len();
     let mut untimed_data = Vec::with_capacity(n_samples);
     let mut timestamp = Vec::with_capacity(n_samples);
 
     // skip time row
-    for row in 1..row_count {
+    for row in 0..row_count {
         let values: Vec<f64> = results
             .iter()
+            .skip(1)
             .filter_map(|col| col.get(row))
             .cloned()
             .collect();

@@ -6,4 +6,4 @@ pub mod publisher;
 pub use publisher::{Publishable, Publisher};
 
 #[doc(inline)]
-pub use listener::{Listener, Notifiable};
+pub use listener::{Callback, Listener, Notifiable};

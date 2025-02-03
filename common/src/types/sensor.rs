@@ -3,6 +3,35 @@ use crate::{IMUReadings, IMUSample};
 const DEFAULT_SENSOR_BUFFER_CAPACITY: usize = 64;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Hash)]
+pub enum SensorType {
+    Accelerometer,
+    Gyroscope,
+    Magnetometer,
+}
+
+impl From<SensorType> for usize {
+    fn from(value: SensorType) -> Self {
+        match value {
+            SensorType::Accelerometer => 0,
+            SensorType::Gyroscope => 1,
+            SensorType::Magnetometer => 2,
+        }
+    }
+}
+
+impl TryFrom<&str> for SensorType {
+    type Error = String;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "Accelerometer" => Ok(Self::Accelerometer),
+            "Gyroscope" => Ok(Self::Gyroscope),
+            "Magnetometer" => Ok(Self::Magnetometer),
+            _ => Err(format!("Unknown sensor type {}", value)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd, Hash)]
 pub struct SensorTag(String);
 
 impl SensorTag {
@@ -16,12 +45,12 @@ impl SensorTag {
 }
 
 #[derive(Clone, Debug)]
-pub struct Sensor<T> {
+pub struct SensorReadings<T> {
     buffer: Vec<T>,
     tag: SensorTag,
 }
 
-impl<T: IMUSample> Sensor<T> {
+impl<T: IMUSample> SensorReadings<T> {
     pub fn new(tag: &str) -> Self {
         Self {
             tag: SensorTag::new(tag),
@@ -49,7 +78,7 @@ impl<T: IMUSample> Sensor<T> {
     }
 }
 
-impl<T: IMUSample> IMUReadings<T> for Sensor<T> {
+impl<T: IMUSample> IMUReadings<T> for SensorReadings<T> {
     fn get_samples_ref(&self) -> &[T] {
         &self.buffer
     }
@@ -75,19 +104,19 @@ mod tests {
 
     #[test]
     fn test_sensor_new() {
-        let sensor = Sensor::<Sample3D>::new("test_sensor");
+        let sensor = SensorReadings::<Sample3D>::new("test_sensor");
         assert_eq!(sensor.get_sensor_tag(), "test_sensor");
     }
 
     #[test]
     fn test_sensor_is_empty() {
-        let sensor = Sensor::<Sample3D>::new("test_sensor");
+        let sensor = SensorReadings::<Sample3D>::new("test_sensor");
         assert!(sensor.is_empty());
     }
 
     #[test]
     fn test_sensor_add_sample() {
-        let mut sensor = Sensor::<Sample3D>::new("test_sensor");
+        let mut sensor = SensorReadings::<Sample3D>::new("test_sensor");
         let sample = Sample3D::default();
         sensor.add_sample(sample.clone());
         assert_eq!(sensor.len(), 1);
@@ -96,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_iter_samples() {
-        let mut sensor = Sensor::<Sample3D>::new("IMU1");
+        let mut sensor = SensorReadings::<Sample3D>::new("IMU1");
         sensor.add_sample(Sample3D::new(1.0, [1.0, 2.0, 3.0]));
         sensor.add_sample(Sample3D::new(2.0, [4.0, 5.0, 6.0]));
         sensor.add_sample(Sample3D::new(3.0, [7.0, 8.0, 8.0]));
@@ -109,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_into_iter_samples() {
-        let mut sensor = Sensor::new("IMU1");
+        let mut sensor = SensorReadings::new("IMU1");
         sensor.add_sample(Sample3D::new(1.0, [1.0, 2.0, 3.0]));
         sensor.add_sample(Sample3D::new(2.0, [4.0, 5.0, 6.0]));
         sensor.add_sample(Sample3D::new(3.0, [7.0, 8.0, 8.0]));

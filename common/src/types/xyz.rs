@@ -68,8 +68,8 @@ impl SubAssign for XYZ {
     }
 }
 
-impl From<Sample3D> for XYZ {
-    fn from(value: Sample3D) -> Self {
+impl<T: IMUSample> From<T> for XYZ {
+    fn from(value: T) -> Self {
         XYZ::from_vec(value.get_measurement()).unwrap()
     }
 }

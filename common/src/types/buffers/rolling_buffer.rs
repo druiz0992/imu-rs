@@ -1,6 +1,6 @@
 const DEFAULT_CAPACITY: usize = 64;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct RollingBuffer<T> {
     buffers: Vec<Vec<T>>,
     current_buffer_index: usize,

@@ -30,6 +30,11 @@ impl IMUSample for Sample3D {
     fn get_timestamp(&self) -> f64 {
         self.timestamp
     }
+
+    fn from_untimed(sample: Vec<f64>, timestamp: f64) -> Self {
+        let xyz = XYZ::from_vec(sample).unwrap();
+        Sample3D::from_xyz(timestamp, xyz)
+    }
 }
 
 #[cfg(test)]

@@ -1,27 +1,25 @@
 #![allow(dead_code)]
 
-//! Module phyphox
-//!
-//! Functionality for data acquisition from accelerometer, gyroscope and magnetometer phone sensors
-//! via an HTTP API. It includes methods to fetch sensor data,
-//! control common, and register listeners to receive for incoming data.
+// Functionality for data acquisition from accelerometer, gyroscope and magnetometer phone sensors
+// via an HTTP API. It includes methods to fetch sensor data,
+// control common, and register listeners to receive for incoming data.
 
 use async_trait::async_trait;
-pub use publisher::Publisher;
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
-use common::types::{Sample3D, Sensor, XYZ};
-use common::{IMUFilter, IMUReadings, IMUSample};
+use common::types::{Sample3D, SensorReadings, SensorType, XYZ};
+use common::IMUFilter;
+pub use publisher::{Callback, Listener, Notifiable, Publishable, Publisher};
 
-use crate::errors::PhyphoxError;
-use crate::filter;
 use crate::helpers;
-use crate::http_client::HttpClient;
-use crate::phyphox_client::ports::PhyphoxPort;
+use crate::models::errors::PhyphoxError;
+use crate::models::filter;
+use crate::models::http_client::HttpClient;
+use crate::ports::PhyphoxPort;
 
 /// Constants for HTTP endpoints and buffer keys.
 const GET_CMD: &str = "/get?";
@@ -29,12 +27,19 @@ const CONTROL_CMD: &str = "/control?cmd=";
 const START_CMD: &str = "start";
 const STOP_CMD: &str = "stop";
 const CLEAR_CMD: &str = "clear";
+const CONFIG_CMD: &str = "/config?";
 
 const N_SENSORS: usize = 3;
+const AVAILABLE_SENSORS: [SensorType; N_SENSORS] = [
+    SensorType::Accelerometer,
+    SensorType::Gyroscope,
+    SensorType::Magnetometer,
+];
+
 /// Configures data acquisition behavior
 pub struct Phyphox {
     client: HttpClient,
-    publisher: Publisher<Box<dyn Fn(Sensor<Sample3D>) + Send + Sync>>,
+    publisher: [Publisher<SensorReadings<Sample3D>>; N_SENSORS],
 }
 
 impl Phyphox {
@@ -45,13 +50,32 @@ impl Phyphox {
 
         Ok(Self {
             client,
-            publisher: Publisher::new(),
+            publisher: std::array::from_fn(|_| Publisher::new()),
         })
     }
 
     /// Returns JSON data from the specified path or FetchData error if it couldnt retrieve data from REST API
     async fn fetch_json(&self, path: &str) -> Result<Value, PhyphoxError> {
         self.client.fetch_json(path).await
+    }
+
+    /// Returns available sensors in phyphox
+    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, PhyphoxError> {
+        let json = self.fetch_json(&format!("{CONFIG_CMD}")).await?;
+        let mut available_sensors: Vec<SensorType> = vec![];
+
+        if let Some(exports) = json.get("export").and_then(|e| e.as_array()) {
+            available_sensors = exports
+                .iter()
+                .filter_map(|entry| {
+                    entry
+                        .get("set")
+                        .and_then(|s| s.as_str())
+                        .and_then(|s| s.try_into().ok())
+                })
+                .collect();
+        }
+        Ok(available_sensors)
     }
 
     /// Returns a tuple containing the retrieved sensor data and a flag indicating if sensor is still active
@@ -83,24 +107,19 @@ impl Phyphox {
 }
 
 #[async_trait]
-impl PhyphoxPort for Phyphox {
-    // Registers a listener function to be called whenever new common are available.
+impl<T: Send + Sync + 'static> PhyphoxPort<T> for Phyphox
+where
+    Listener<T>: Notifiable<SensorReadings<Sample3D>>,
+{
+    // Registers a accelerometer/gyroscope/magentometer listener functions to be called whenever new samples are available.
     // Returns the id of the registered listener.
-    fn register<F, S, D>(&self, listener: F) -> Uuid
-    where
-        F: Fn(S) + Send + Sync + 'static,
-        S: IMUReadings<D>,
-        D: IMUSample,
-    {
-        self.publisher.register(Box::new(listener))
+    fn register_sensor(&self, listener: Listener<T>, sensor_type: SensorType) -> Uuid {
+        self.publisher[sensor_type as usize].register_listener(&listener)
     }
 
-    // Unregisters a listener for the list of registered listeners.
-    // Returns a ListenerNotFound Error if the listener wasn't registered.
-    fn unregister(&self, id: Uuid) -> Result<(), PhyphoxError> {
-        self.publisher.unregister(id).map_err(|_| {
-            PhyphoxError::ListenerNotFound(format!("Listener with id {} not found", id))
-        })
+    // Unregisters a accelerometer/gyroscope/magnetometer listeners from the list of registered listeners.
+    fn unregister_sensor(&self, id: Uuid, sensor_type: SensorType) {
+        self.publisher[sensor_type as usize].unregister_listener(id);
     }
 
     /// Starts the data acquisition process. The process is stopped with a SIGINT signal
@@ -124,6 +143,8 @@ impl PhyphoxPort for Phyphox {
                 vec![Some(filter::MovingAverage::new(w_size)); N_SENSORS]
             });
 
+        let active_sensor = self.get_available_sensors().await?;
+
         loop {
             tokio::select! {
                 _ = abort_signal.notified() => {
@@ -131,7 +152,11 @@ impl PhyphoxPort for Phyphox {
                 }
 
                 _ = tokio::time::sleep(period_millis) => {
-                    for sensor_idx in 0..=N_SENSORS {
+                    for sensor in AVAILABLE_SENSORS {
+                        if !active_sensor.contains(&sensor) {
+                            continue;
+                        }
+                        let sensor_idx = sensor as usize;
                         let (time_str, variables) = helpers::control_str(sensor_idx)?;
                         let (timestamp_info, untimed_data_info,  is_measuring) = match self
                             .get_data(time_str, Some(last_time[sensor_idx]), &variables)
@@ -155,9 +180,9 @@ impl PhyphoxPort for Phyphox {
                             None => untimed_data_info, // No need to clone here
                         };
                         let filtered_data = timestamp_info.into_iter().zip(filtered_untimed_data.into_iter()).map(|(t,s)| Sample3D::from_xyz(t,s)).collect();
-                        let buffer = Sensor::from_vec(&sensor_tag, filtered_data);
+                        let buffer = SensorReadings::from_vec(&sensor_tag, filtered_data);
 
-                        //self.publisher.notify(Arc::new(buffer));
+                        self.publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;
                     }
                 }
             }
@@ -242,7 +267,7 @@ mod tests {
                     "accX": { "buffer": [1.0, 2.0], "size": 0, "updateMode": "partial" },
                     "accY": { "buffer": [3.0, 4.0], "size": 0, "updateMode": "partial" },
                     "accZ": { "buffer": [5.0, 6.0], "size": 0, "updateMode": "partial" },
-                    "acc_time": { "buffer": [7.0, 8.0], "size": 0, "updateMode": "partial" }
+                    "acc_time": { "buffer": [1.0, 2.0], "size": 0, "updateMode": "partial" }
                 },
                 "status": {
                     "measuring": true
@@ -253,15 +278,52 @@ mod tests {
 
         let phyphox = Phyphox::new(mock_server.uri()).unwrap();
 
-        let (data, is_measuring) = phyphox
+        let (_timestamps, data, is_measuring) = phyphox
             .get_data("acc_time", Some(0.0), &["accX", "accY", "accZ"])
             .await
             .unwrap();
 
         assert_eq!(
             data,
-            vec![vec![7.0, 1.0, 3.0, 5.0], vec![8.0, 2.0, 4.0, 6.0]]
+            vec![
+                XYZ::from_vec(vec![1.0, 3.0, 5.0]).unwrap(),
+                XYZ::from_vec(vec![2.0, 4.0, 6.0]).unwrap()
+            ]
         );
         assert!(is_measuring);
+    }
+
+    #[tokio::test]
+    async fn test_phyphox_get_incomplete_data() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "buffer": {
+                    "accX": { "buffer": [1.0, 2.0], "size": 0, "updateMode": "partial" },
+                    "accY": { "buffer": [3.0], "size": 0, "updateMode": "partial" },
+                    "accZ": { "buffer": [5.0, 6.0], "size": 0, "updateMode": "partial" },
+                    "acc_time": { "buffer": [1.0, 2.0], "size": 0, "updateMode": "partial" }
+                },
+                "status": {
+                    "measuring": true
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let phyphox = Phyphox::new(mock_server.uri()).unwrap();
+
+        let (_timestamps, data, is_measuring) = phyphox
+            .get_data("acc_time", Some(0.0), &["accX", "accY", "accZ"])
+            .await
+            .unwrap();
+
+        assert_eq!(data, vec![XYZ::from_vec(vec![1.0, 3.0, 5.0]).unwrap(),]);
+        assert!(is_measuring);
+    }
+
+    struct MockPhyphox {
+        // Add any necessary fields for the mock
     }
 }
