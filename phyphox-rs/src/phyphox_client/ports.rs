@@ -5,7 +5,7 @@ use tokio::sync::Notify;
 use uuid::Uuid;
 
 use crate::errors::PhyphoxError;
-use common::traits::{IMUSample, IMUReadings};
+use common::{IMUReadings, IMUSample};
 
 #[async_trait]
 pub trait PhyphoxPort {

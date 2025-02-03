@@ -1,30 +1,9 @@
-use std::collections::VecDeque;
-
+use common::types::CircularBuffer;
 use common::{IMUFilter, IMUUntimedSample};
 
 const DEFAULT_CAPACITY: usize = 64;
 
-#[derive(Clone, Debug)]
-struct CircularBuffer<T> {
-    #[allow(dead_code)]
-    size: usize,
-    buffer: VecDeque<T>,
-}
-
-impl<T: Clone + Default> CircularBuffer<T> {
-    fn new(size: usize) -> Self {
-        let mut buffer = VecDeque::with_capacity(size);
-        buffer.extend(std::iter::repeat(T::default()).take(size));
-        Self { buffer, size }
-    }
-
-    fn push(&mut self, elem: T) -> T {
-        let out = self.buffer.pop_front().unwrap_or(T::default());
-        self.buffer.push_back(elem);
-        out
-    }
-}
-
+/// Definition of moving average filter, containing `window_size` elements to do the smoothing.
 #[derive(Clone)]
 pub(crate) struct MovingAverage<T> {
     window_size: usize,
@@ -33,6 +12,7 @@ pub(crate) struct MovingAverage<T> {
 }
 
 impl<T: IMUUntimedSample> MovingAverage<T> {
+    /// Initializes new `MovingAverage` filter with `window_size` elements.
     pub(crate) fn new(window_size: usize) -> Self {
         Self {
             window_size,
@@ -43,6 +23,7 @@ impl<T: IMUUntimedSample> MovingAverage<T> {
 }
 
 impl<T: IMUUntimedSample> IMUFilter<T> for MovingAverage<T> {
+    /// Returns smoothed samples
     fn filter(&mut self, samples: Vec<T>) -> Vec<T> {
         let mut filtered_data = Vec::with_capacity(DEFAULT_CAPACITY);
         for sample in samples {

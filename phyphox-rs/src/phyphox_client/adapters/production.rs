@@ -14,8 +14,8 @@ use std::time::Duration;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
-use common::traits::{IMUFilter, IMUReadings, IMUSample};
 use common::types::{Sample3D, Sensor, XYZ};
+use common::{IMUFilter, IMUReadings, IMUSample};
 
 use crate::errors::PhyphoxError;
 use crate::filter;
