@@ -4,22 +4,17 @@ use std::time::Duration;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
-use crate::errors::PhyphoxError;
-use common::{IMUReadings, IMUSample};
+use crate::models::errors::PhyphoxError;
+use common::types::SensorType;
+use publisher::Listener;
 
 #[async_trait]
-pub trait PhyphoxPort {
-    // Registers a listener function to be called whenever new common are available.
-    // Returns the id of the registered listener.
-    fn register<F, S, D>(&self, listener: F) -> Uuid
-    where
-        F: Fn(S) + Send + Sync + 'static,
-        S: IMUReadings<D>,
-        D: IMUSample;
+pub trait PhyphoxPort<T: Send + Sync + 'static> {
+    // Registers a listener function for a given sensor type to be called whenever new measures are available.
+    fn register_sensor(&self, listener: Listener<T>, sensor_type: SensorType) -> Uuid;
 
     // Unregisters a listener for the list of registered listeners.
-    // Returns a ListenerNotFound Error if the listener wasn't registered.
-    fn unregister(&self, id: Uuid) -> Result<(), PhyphoxError>;
+    fn unregister_sensor(&self, id: Uuid, sensor_type: SensorType);
 
     /// Starts the data acquisition process. The process is stopped with a SIGINT signal
     /// Returns FetchData error if it can't connect to REST API.

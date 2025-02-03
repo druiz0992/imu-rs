@@ -13,4 +13,4 @@ pub use traits::imu::{IMUFilter, IMUReadings, IMUResampler, IMUSample, IMUUntime
 
 // Re-export types
 #[doc(inline)]
-pub use types::{Sample3D, Sensor, SensorTag};
+pub use types::{buffers, Sample3D, SensorReadings, SensorTag, XYZ};

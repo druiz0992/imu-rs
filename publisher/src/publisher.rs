@@ -9,7 +9,7 @@ use crate::listener::{Callback, Notifiable};
 pub trait Publishable<T> {
     fn register_listener(&self, listener: &dyn Notifiable<T>) -> Uuid;
     fn unregister_listener(&self, listener_id: Uuid);
-    async fn notify_listener(&self, data: Arc<T>);
+    async fn notify_listeners(&self, data: Arc<T>);
 }
 
 pub struct Publisher<T>
@@ -48,7 +48,7 @@ where
         listeners.remove(&listener_id);
     }
 
-    async fn notify_listener(&self, data: Arc<T>) {
+    async fn notify_listeners(&self, data: Arc<T>) {
         let listeners: Vec<Callback<T>> = {
             let listeners_guard = self.listeners.lock().unwrap();
             listeners_guard.values().cloned().collect()
@@ -112,7 +112,7 @@ mod tests {
         });
 
         let _listener_id = publisher.register_listener(&listener);
-        publisher.notify_listener(Arc::new(42)).await;
+        publisher.notify_listeners(Arc::new(42)).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         assert_eq!(*handler.data.lock().await, 42);
@@ -126,7 +126,7 @@ mod tests {
         let listener = listener!(handler.handle);
 
         let _listener_id = publisher.register_listener(&listener);
-        publisher.notify_listener(Arc::new(42)).await;
+        publisher.notify_listeners(Arc::new(42)).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         assert_eq!(*handler.data.lock().await, 42);
@@ -149,7 +149,7 @@ mod tests {
 
         let listener_id = publisher.register_listener(&listener);
         publisher.unregister_listener(listener_id);
-        publisher.notify_listener(Arc::new(100)).await;
+        publisher.notify_listeners(Arc::new(100)).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         // Should remain unchanged since listener was removed

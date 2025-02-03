@@ -1,18 +1,17 @@
 #![allow(dead_code)]
 
-//! Module Mock
-//!
-//! Emulates functionality of real Phyphox Client
+// Emulates functionality of real Phyphox Client
 
 use async_trait::async_trait;
-use common::{IMUReadings, IMUSample};
+use publisher::Listener;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
-use crate::errors::PhyphoxError;
-use crate::phyphox_client::ports::PhyphoxPort;
+use crate::models::errors::PhyphoxError;
+use crate::ports::PhyphoxPort;
+use common::types::SensorType;
 
 /// Configures data acquisition behavior
 pub(crate) struct PhyphoxMock;
@@ -26,21 +25,15 @@ impl PhyphoxMock {
 }
 
 #[async_trait]
-impl PhyphoxPort for PhyphoxMock {
-    // Registers a listener function to be called whenever new common are available.
+impl<T: Send + Sync + 'static> PhyphoxPort<T> for PhyphoxMock {
+    // Registers a listener function to be called whenever new measurements are available.
     // Returns the id of the registered listener.
-    fn register<F, S, D>(&self, _listener: F) -> Uuid
-    where
-        F: Fn(S) + Send + Sync + 'static,
-        S: IMUReadings<D>,
-        D: IMUSample,
-    {
+    fn register_sensor(&self, _listener: Listener<T>, _sensor_type: SensorType) -> Uuid {
         todo!();
     }
 
     // Unregisters a listener for the list of registered listeners.
-    // Returns a ListenerNotFound Error if the listener wasn't registered.
-    fn unregister(&self, _id: Uuid) -> Result<(), PhyphoxError> {
+    fn unregister_sensor(&self, _id: Uuid, _sensor_type: SensorType) {
         todo!();
     }
 

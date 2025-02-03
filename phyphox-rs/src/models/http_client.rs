@@ -2,7 +2,7 @@ use reqwest::Client as ReqwestClient;
 use serde_json::Value;
 use std::time::Duration;
 
-use crate::errors::PhyphoxError;
+use super::errors::PhyphoxError;
 
 const CLIENT_TIMEOUT_DEFAULT: u64 = 5;
 

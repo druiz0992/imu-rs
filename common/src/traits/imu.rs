@@ -24,6 +24,8 @@ pub trait IMUSample: Send + Sync + Clone + 'static {
     fn get_timestamp(&self) -> f64;
     ///  Returns the measurement data
     fn get_measurement(&self) -> Vec<f64>;
+    /// Returns a IMUSample
+    fn from_untimed(sample: Vec<f64>, timestamp: f64) -> Self;
 }
 
 /// Collection of sensor readings from an IMU (Inertial Measurement Unit).

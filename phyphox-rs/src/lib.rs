@@ -35,19 +35,20 @@
 //!     let abort_signal = Arc::new(Notify::new());
 //!
 //!     // Example listener function
-//!     let listener = |data: (String, MeasurementBuffer)| {
+//!     let listener = Listener::new(|| {
 //!         println!("Received data from {}: {:?}", data.0, data.1);
 //!     };
-//!
+//!     
 //!     // Start the sensor processing task
 //!     let (task_handle, phyphox) = run(
 //!         base_url,
 //!         sensor_tag,
 //!         period_update_millis,
 //!         Arc::clone(&abort_signal),
-//!         Some(vec![listener]),
-//!         None,
+//!         Some(10)
 //!     );
+//!
+//!     phyphox.register_sensor(listener, SensorType::Accelerometer);
 //!
 //!     // Let the system run for a few seconds
 //!     sleep(Duration::from_secs(5)).await;
@@ -62,16 +63,16 @@
 //! }
 //! ```
 
-pub mod errors;
-mod filter;
+pub mod adapters;
 mod helpers;
-mod http_client;
-pub mod phyphox_client;
+pub mod models;
+pub mod ports;
+pub mod services;
 
-use errors::PhyphoxError;
+use adapters::production::Phyphox;
 use log::error;
-use phyphox_client::adapters::production::Phyphox;
-use phyphox_client::ports::PhyphoxPort;
+use models::errors::PhyphoxError;
+use ports::PhyphoxPort;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -87,30 +88,17 @@ use tokio::sync::Notify;
 ///
 /// An error ClientBuild is returned if http client connecting with phyphox app REST API cannot be created.
 
-pub fn run<F>() {
-    todo!();
-}
-/*
-pub fn run<F>(
+pub fn run(
     base_url: String,
     sensor_tag: String,
     period_update_millis: Duration,
     abort_signal: Arc<Notify>,
-    listeners: Option<Vec<F>>,
     window_size: Option<usize>,
-) -> Result<(tokio::task::JoinHandle<()>, Arc<Phyphox>), PhyphoxError>
-where
-    F: Fn(Arc<dyn IMUEvent<Item=i32>) + Send + Sync + 'static,
-{
+) -> Result<(tokio::task::JoinHandle<()>, Arc<Phyphox>), PhyphoxError> {
     let phyphox = Arc::new(Phyphox::new(base_url)?);
     let phyphox_clone = Arc::clone(&phyphox);
     let handle = tokio::spawn({
         async move {
-            if let Some(listeners) = listeners {
-                for listener in listeners.into_iter() {
-                    phyphox_clone.register(listener);
-                }
-            }
             if let Err(e) = phyphox_clone
                 .start(period_update_millis, sensor_tag, abort_signal, window_size)
                 .await
@@ -121,4 +109,3 @@ where
     });
     Ok((handle, phyphox))
 }
-*/

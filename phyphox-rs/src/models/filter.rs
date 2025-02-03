@@ -1,12 +1,12 @@
-use common::types::CircularBuffer;
+use common::buffers::CircularBuffer;
 use common::{IMUFilter, IMUUntimedSample};
 
 const DEFAULT_CAPACITY: usize = 64;
 
 /// Definition of moving average filter, containing `window_size` elements to do the smoothing.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct MovingAverage<T> {
-    window_size: usize,
+    window_size: f64,
     buffer: CircularBuffer<T>,
     aggregate: T,
 }
@@ -15,7 +15,7 @@ impl<T: IMUUntimedSample> MovingAverage<T> {
     /// Initializes new `MovingAverage` filter with `window_size` elements.
     pub(crate) fn new(window_size: usize) -> Self {
         Self {
-            window_size,
+            window_size: window_size as f64,
             buffer: CircularBuffer::new(window_size),
             aggregate: T::default(),
         }
