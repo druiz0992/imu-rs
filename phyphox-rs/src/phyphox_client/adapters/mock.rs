@@ -5,7 +5,7 @@
 //! Emulates functionality of real Phyphox Client
 
 use async_trait::async_trait;
-use common::traits::{IMUSample, IMUReadings};
+use common::{IMUReadings, IMUSample};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
