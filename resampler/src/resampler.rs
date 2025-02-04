@@ -1,24 +1,15 @@
-use common::IMUEvent;
-use publisher::Publisher;
-
-use std::error::Error;
 use std::sync::Arc;
+use std::{error::Error, marker::PhantomData};
+use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
+use uuid::Uuid;
 
-use crate::buffer::Buffer;
+use common::{IMUReadings, IMUSample, SensorType};
+use publisher::{Listener, Publishable, Publisher};
+
 use crate::utils;
 
-pub struct ResampledSamples(Vec<f64>);
-
-impl IMUEvent for ResampledSamples {
-    fn get_samples(&self) -> &Vec<Arc<dyn common::IMUSample>> {}
-    fn get_sensor_tag(&self) -> &str {
-        "Test"
-    }
-    fn get_sensor_type(&self) -> usize {
-        3
-    }
-}
+const MIN_RESAMPLING_PERIOD_MILLIS: u64 = 5;
 
 #[derive(Default)]
 pub enum ResamplePolicy {
@@ -29,83 +20,93 @@ pub enum ResamplePolicy {
     WeightedAverage,
 }
 
-pub struct Resampler {
-    buffer: Buffer,
-    n_buffer: usize,
-    period_millis: Duration,
-    publisher: Publisher<Arc<dyn IMUEvent>>,
-    resample_policy: ResamplePolicy,
+pub struct Resampler<S, T>
+where
+    S: IMUSample,
+    T: Send + Sync + IMUReadings<S> + 'static,
+{
+    buffer: Vec<Mutex<T>>,
+    publisher: Vec<Publisher<T>>,
     tag: String,
+    _phantom_data: PhantomData<S>,
 }
 
-impl Resampler {
-    pub fn new(
-        n_buffer: usize,
-        period_millis: Duration,
-        resample_policy: Option<ResamplePolicy>,
-        tag: String,
-    ) -> Self {
-        let mut policy = ResamplePolicy::default();
-        if let Some(updated_policy) = resample_policy {
-            policy = updated_policy;
-        }
-
+impl<S, T> Resampler<S, T>
+where
+    S: IMUSample,
+    T: Send + Sync + IMUReadings<S> + Default + 'static,
+{
+    pub fn new(n_buffer: usize, tag: String) -> Self {
         Self {
-            period_millis,
-            resample_policy: policy,
-            buffer: Buffer::new(n_buffer),
-            publisher: Publisher::new(),
-            n_buffer,
+            buffer: (0..n_buffer).map(|_| Mutex::new(T::default())).collect(),
+            publisher: (0..n_buffer).map(|_| Publisher::new()).collect(),
             tag,
+            _phantom_data: PhantomData,
         }
     }
 
-    pub fn register<F>(&self, listener: F)
-    where
-        F: Fn(Arc<dyn IMUEvent>) + Send + Sync + 'static,
-    {
-        self.publisher.register(listener);
+    // Registers a accelerometer/gyroscope/magentometer listener functions to be called whenever new samples are available.
+    // Returns the id of the registered listener.
+    fn register_sensor(&self, listener: Listener<T>, sensor_type: SensorType) -> Uuid {
+        self.publisher[sensor_type as usize].register_listener(&listener)
     }
 
-    pub async fn handle_notification(&self, measurement: Arc<dyn IMUEvent>) {
-        self.buffer.handle_notification(measurement).await;
+    // Unregisters a accelerometer/gyroscope/magnetometer listeners from the list of registered listeners.
+    fn unregister_sensor(&self, id: Uuid, sensor_type: SensorType) {
+        self.publisher[sensor_type as usize].unregister_listener(id);
     }
 
-    fn apply_resampling_policies(
+    pub async fn handle(&self, measurement: Arc<T>) {
+        let a = measurement.get_samples().get(0).cloned();
+        match a {
+            Some(_) => println!("SOMTHING"),
+            None => print!("NODAD"),
+        }
+    }
+    pub async fn handle_notification(&self, measurement: T, sensor_type: SensorType) {
+        let mut buffer = self.buffer[sensor_type as usize].lock().await;
+        buffer.extend(measurement.get_samples())
+    }
+
+    async fn apply_resampling_policies(
         &self,
-        samples: Vec<Vec<[f64; 4]>>,
+        samples: Vec<T>,
+        resample_policy: &ResamplePolicy,
+        resampling_period_millis: f64,
         timestamp: f64,
-        cache: &mut Vec<[f64; 4]>,
-    ) -> Vec<[f64; 4]> {
-        let mut parsed_samples: Vec<[f64; 4]> = vec![[0.0; 4]; samples.len()];
-
-        for (idx, imu_samples) in samples.iter().enumerate() {
+        cache: &mut Vec<S>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for (idx, imu_samples) in samples.into_iter().enumerate() {
+            let n_samples = imu_samples.get_samples().len();
             // if no samples available, take last sample
-            if imu_samples.is_empty() {
-                parsed_samples[idx] = cache[idx];
-            } else if imu_samples.len() > 1 {
+            if n_samples > 1 {
                 // apply redundant sample policy
-                parsed_samples[idx] = match self.resample_policy {
-                    ResamplePolicy::Averaging => utils::compute_average(imu_samples, timestamp),
+                cache[idx] = match resample_policy {
+                    ResamplePolicy::Averaging => {
+                        utils::compute_average(imu_samples.get_samples(), timestamp)?
+                    }
                     ResamplePolicy::FirstSample => {
-                        let sample = imu_samples[0];
-                        [timestamp, sample[1], sample[2], sample[3]]
+                        imu_samples.get_samples().get(0).cloned().unwrap()
                     }
-                    ResamplePolicy::LastSample => {
-                        let sample = imu_samples[imu_samples.len() - 1];
-                        [timestamp, sample[1], sample[2], sample[3]]
-                    }
+                    ResamplePolicy::LastSample => imu_samples
+                        .get_samples()
+                        .get(n_samples - 1)
+                        .cloned()
+                        .unwrap(),
                     ResamplePolicy::WeightedAverage => utils::compute_weighted_average(
-                        imu_samples,
-                        timestamp - self.period_millis.as_secs_f64() / 2.0,
-                    ),
+                        imu_samples.get_samples(),
+                        timestamp - resampling_period_millis / 2.0,
+                    )?,
                 }
-            } else {
-                parsed_samples[idx] = samples[idx][0];
+            } else if n_samples == 1 {
+                cache[idx] = imu_samples.get_samples().get(0).cloned().unwrap();
+            }
+            {
+                let mut buffer = self.buffer[idx].lock().await;
+                buffer.extend(vec![cache[idx].clone()]);
             }
         }
-
-        parsed_samples
+        Ok(())
     }
 
     // v(t) = v_prev + (v_next - v_prev) * (t - t_prev) / (t_next - t_prev)
@@ -141,49 +142,75 @@ impl Resampler {
         resampled_values
     }
 
-    fn merge(&self, samples: Vec<[f64; 4]>) -> Vec<f64> {
-        let mut resampled_values = Vec::new();
-        resampled_values.push(samples[0][0]);
+    async fn samples_till_timestamp(&self, timestamp: f64, period: f64) -> Vec<T> {
+        // Assumption is that we read samples within the timestamp limits, and the rest will be discarded
+        // Earlier samples are too old. There shouldnt be any samples past timestamp.
 
-        for sample in samples {
-            resampled_values.extend(sample.iter().skip(1).cloned());
-        }
-
-        resampled_values
-    }
-
-    fn cache_samples(&self, samples: &[f64], cache: Vec<[f64; 4]>) -> Vec<[f64; 4]> {
-        let mut new_cache = vec![[0.0; 4]; cache.len()];
-        let n_buffers = cache.len();
-        for i in 0..n_buffers {
-            if 1 + i * 3 + 2 < samples.len() {
-                let idx = 1 + i * 3;
-                new_cache[i] = [
-                    samples[0],       // timestamp
-                    samples[idx],     // x component
-                    samples[idx + 1], // y component
-                    samples[idx + 2], // z component
-                ];
+        let mut buffer_clone: Vec<_> = {
+            let mut clones = Vec::new();
+            for b in self.buffer.iter() {
+                let mut buffer = b.lock().await; // Lock and get mutable access
+                clones.push(buffer.clone()); // Clone before clearing
+                buffer.clear(); // Clear the original buffer
             }
+            clones
+        };
+
+        for sensor_buffer in buffer_clone.iter_mut() {
+            let filtered_samples: Vec<S> = sensor_buffer
+                .into_iter_samples()
+                .filter_map(|sample| {
+                    let sample_timestamp = sample.get_timestamp();
+                    let sample_data = sample.get_measurement();
+                    if sample_timestamp <= timestamp
+                        && sample_timestamp >= timestamp - period * 10.0
+                    {
+                        Some(S::from_untimed(sample_data, sample_timestamp))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            sensor_buffer.clear();
+            sensor_buffer.extend(filtered_samples);
         }
-        new_cache
+
+        buffer_clone
     }
 
+    async fn notify_listeners(&self) {
+        for (idx, publisher) in self.publisher.iter().enumerate() {
+            let mut buffer = self.buffer[idx].lock().await;
+            let buffer_clone = buffer.clone();
+            buffer.clear();
+            publisher.notify_listeners(Arc::new(buffer_clone)).await;
+        }
+    }
     // TODO: Cant be async.
-    pub async fn start(&self) -> Result<(), Box<dyn Error>> {
-        let mut next_resampling_timestamp = self.period_millis;
-        let mut cache = vec![[0.0; 4]; self.n_buffer];
+    pub async fn start(
+        &self,
+        resampling_period_millis: u64,
+        resampling_policy: Option<ResamplePolicy>,
+    ) -> Result<(), Box<dyn Error>> {
+        if resampling_period_millis < MIN_RESAMPLING_PERIOD_MILLIS {
+            return Err(Box::<dyn Error>::from(format!(
+                "Resampling period needs to be larger than {MIN_RESAMPLING_PERIOD_MILLIS}"
+            )));
+        }
+        let resampling_policy = resampling_policy.unwrap_or_default();
+        let resampling_duration_millis = Duration::from_millis(resampling_period_millis);
+        let mut next_resampling_timestamp = resampling_duration_millis.as_secs_f64();
+        let mut cache = vec![S::default(); self.buffer.len()];
 
-        sleep(self.period_millis).await;
+        sleep(resampling_duration_millis).await;
 
         loop {
-            sleep(self.period_millis).await;
+            sleep(resampling_duration_millis).await;
 
             let raw_samples = self
-                .buffer
                 .samples_till_timestamp(
-                    next_resampling_timestamp.as_secs_f64(),
-                    self.period_millis.as_secs_f64(),
+                    next_resampling_timestamp,
+                    resampling_duration_millis.as_secs_f64(),
                 )
                 .await;
             /*
@@ -197,29 +224,49 @@ impl Resampler {
             );
             */
 
-            let raw_samples = self.apply_resampling_policies(
+            self.apply_resampling_policies(
                 raw_samples,
-                next_resampling_timestamp.as_secs_f64(),
+                &resampling_policy,
+                resampling_duration_millis.as_secs_f64(),
+                next_resampling_timestamp,
                 &mut cache,
-            );
+            )
+            .await?;
 
             //println!("RAW SAMPLES AFTER POLICY {:?} {:?}", raw_samples, cache);
 
-            /*
-            let final_samples = self.resample(
-                raw_samples,
-                next_resampling_timestamp.as_secs_f64(),
-                &mut cache,
-            );
-            */
-            let final_samples = self.merge(raw_samples);
-
-            cache = self.cache_samples(&final_samples, cache);
-
             //println!("RESAMPLED - {:?} - {:?}", self.tag.clone(), final_samples);
-            self.publisher.notify((self.tag.clone(), final_samples));
+            self.notify_listeners().await;
 
-            next_resampling_timestamp += self.period_millis;
+            next_resampling_timestamp += resampling_duration_millis.as_secs_f64();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use common::{Sample3D, SensorReadings};
+    use publisher::{listener, Listener, Notifiable};
+
+    #[tokio::test]
+    async fn test_register_sensor() {
+        let resampler = Arc::new(Resampler::<Sample3D, SensorReadings<_>>::new(
+            3,
+            "test".to_string(),
+        ));
+        let listener_resampler = resampler.clone();
+        let listener = Listener::new({
+            move |value: Arc<SensorReadings<Sample3D>>| {
+                let resampler = listener_resampler.clone();
+                async move { resampler.handle(value).await }
+            }
+        });
+        let listener2 = listener!(resampler.handle);
+
+        //let listener = listener!(resampler.handle);
+        let callback = listener2.get_callback();
+        let buffer = resampler.buffer[0].lock().await;
+        callback(Arc::new(buffer.clone())).await;
     }
 }

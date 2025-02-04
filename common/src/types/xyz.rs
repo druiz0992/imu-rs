@@ -1,6 +1,6 @@
 use nalgebra::Vector3;
 
-use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 
 use crate::constants::N_XYZ_COORDINATES;
 use crate::{IMUSample, IMUUntimedSample};
@@ -30,6 +30,10 @@ impl XYZ {
 impl IMUUntimedSample for XYZ {
     fn get_measurement(&self) -> Vec<f64> {
         vec![self.0.x, self.0.y, self.0.z]
+    }
+
+    fn from_timed(timed_samples: Vec<f64>) -> Option<Self> {
+        XYZ::from_vec(timed_samples)
     }
 }
 impl Add for XYZ {
@@ -68,9 +72,17 @@ impl SubAssign for XYZ {
     }
 }
 
+impl Mul<f64> for XYZ {
+    type Output = Self;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        Self(self.0 * rhs)
+    }
+}
+
 impl<T: IMUSample> From<T> for XYZ {
     fn from(value: T) -> Self {
-        XYZ::from_vec(value.get_measurement()).unwrap()
+        Self::from_timed(value.get_measurement()).unwrap_or_default()
     }
 }
 

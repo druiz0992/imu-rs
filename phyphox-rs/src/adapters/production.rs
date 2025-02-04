@@ -13,7 +13,8 @@ use uuid::Uuid;
 
 use common::types::{Sample3D, SensorReadings, SensorType, XYZ};
 use common::IMUFilter;
-pub use publisher::{Callback, Listener, Notifiable, Publishable, Publisher};
+pub use publisher::listener::Notifiable;
+pub use publisher::{Listener, Publishable, Publisher};
 
 use crate::helpers;
 use crate::models::errors::PhyphoxError;

@@ -1,8 +1,8 @@
 pub mod buffers;
-pub mod sample3D;
-pub mod sensor;
+pub mod sample_3d;
+pub mod sensor_readings;
 pub mod xyz;
 
-pub use sample3D::*;
-pub use sensor::*;
+pub use sample_3d::*;
+pub use sensor_readings::*;
 pub use xyz::*;

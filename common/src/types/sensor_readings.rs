@@ -31,7 +31,7 @@ impl TryFrom<&str> for SensorType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, PartialOrd, Hash)]
 pub struct SensorTag(String);
 
 impl SensorTag {
@@ -44,7 +44,7 @@ impl SensorTag {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SensorReadings<T> {
     buffer: Vec<T>,
     tag: SensorTag,
@@ -87,6 +87,13 @@ impl<T: IMUSample> IMUReadings<T> for SensorReadings<T> {
     }
     fn get_sensor_tag(&self) -> &str {
         self.tag.inner()
+    }
+
+    fn extend(&mut self, elems: Vec<T>) {
+        self.buffer.extend(elems);
+    }
+    fn clear(&mut self) {
+        self.buffer.clear();
     }
 }
 
