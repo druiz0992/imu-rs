@@ -20,6 +20,13 @@ impl Sample3D {
             measurement,
         }
     }
+
+    pub fn from_vec(sample_vec: [f64; 4]) -> Self {
+        Self {
+            timestamp: sample_vec[0],
+            measurement: XYZ::new([sample_vec[1], sample_vec[2], sample_vec[3]]),
+        }
+    }
 }
 
 impl IMUSample for Sample3D {
