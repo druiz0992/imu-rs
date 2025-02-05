@@ -27,7 +27,6 @@ where
 {
     buffer: Vec<Mutex<T>>,
     publisher: Vec<Publisher<T>>,
-    tag: String,
     _phantom_data: PhantomData<S>,
 }
 
@@ -40,7 +39,6 @@ where
         Self {
             buffer: (0..n_buffer).map(|_| Mutex::new(T::default())).collect(),
             publisher: (0..n_buffer).map(|_| Publisher::new()).collect(),
-            tag,
             _phantom_data: PhantomData,
         }
     }

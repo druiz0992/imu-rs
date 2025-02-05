@@ -44,6 +44,17 @@ impl IMUSample for Sample3D {
     }
 }
 
+impl TryFrom<Vec<f64>> for Sample3D {
+    type Error = String;
+
+    fn try_from(value: Vec<f64>) -> Result<Self, Self::Error> {
+        if value.len() != N_XYZ_COORDINATES + 1 {
+            return Err("Invalid length of input vector".to_string());
+        }
+        Ok(Sample3D::from_vec([value[0], value[1], value[2], value[3]]))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
