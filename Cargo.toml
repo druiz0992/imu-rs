@@ -1,5 +1,5 @@
 [workspace]
-members = ["publisher", "common", "resampler", "phyphox-rs"]
+members = ["publisher", "common", "resampler", "phyphox-rs", "ahrs-rs", "test-utils"]
 resolver = "2"
 
 [profile.dev]
