@@ -1,3 +1,4 @@
+use crate::SensorType;
 use std::iter::Iterator;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 
@@ -32,19 +33,25 @@ pub trait IMUSample: Send + Sync + Clone + Default + 'static {
 
 /// Collection of sensor readings from an IMU (Inertial Measurement Unit).
 pub trait IMUReadings<T: IMUSample>: Send + Sync + Clone {
-    ///  Returns the sensor tag
+    ///   Returns the sensor tag
     fn get_sensor_tag(&self) -> &str;
+    ///   Returns the sensor type
+    fn get_sensor_type(&self) -> &SensorType;
     ///   Returns a slive to samples.
     fn get_samples_ref(&self) -> &[T];
     ///   Returns samples
     fn get_samples(&self) -> Vec<T>;
+    ///   Adds new samples
     fn extend(&mut self, elems: Vec<T>);
+    ///   Creates new IMUReadings
+    fn from_vec(tag: &str, readings_type: SensorType, data: Vec<T>) -> Self;
+    ///   Clears stored samples
     fn clear(&mut self);
-    /// Returns an iterator over references to the samples.
+    ///   Returns an iterator over references to the samples.
     fn iter_samples(&self) -> impl Iterator<Item = &T> {
         self.get_samples_ref().iter()
     }
-    /// Returns an iterator over samples.
+    ///   Returns an iterator over samples.
     fn into_iter_samples(&self) -> impl Iterator<Item = T> {
         self.get_samples().into_iter()
     }

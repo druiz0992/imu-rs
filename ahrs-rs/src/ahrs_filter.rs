@@ -13,7 +13,7 @@ const MADGWICK_BETA: f64 = 0.1;
 
 pub struct AHRSFilter<T, S>
 where
-    T: IMUReadings<S> + Send + Sync + Default + 'static,
+    T: IMUReadings<S> + Send + Sync + 'static,
     S: IMUSample,
 {
     ahrs_filter: Madgwick<f64>,
@@ -24,14 +24,20 @@ where
 
 impl<T, S> AHRSFilter<T, S>
 where
-    T: IMUReadings<S> + Send + Sync + Default + 'static,
+    T: IMUReadings<S> + Send + Sync + 'static,
     S: IMUSample,
 {
     pub fn new(sampling_period_seconds: f64, n_buffer: usize) -> Self {
         Self {
             ahrs_filter: Madgwick::new(sampling_period_seconds, MADGWICK_BETA),
             buffer: (0..n_buffer)
-                .map(|_| Arc::new(Mutex::new(T::default())))
+                .map(|_| {
+                    Arc::new(Mutex::new(T::from_vec(
+                        "",
+                        SensorType::Accelerometer,
+                        vec![],
+                    )))
+                })
                 .collect(),
             publisher: Mutex::new(Publisher::new()),
             _phantom_data: PhantomData,
@@ -64,9 +70,9 @@ where
         let n_samples = sensors[0].1.len();
         let mut sample_quaternion = Vec::new();
         for i in 0..n_samples {
-            let gyro = &sensors[SensorType::Gyroscope as usize].1[i];
-            let accel = &sensors[SensorType::Accelerometer as usize].1[i];
-            let mag = &sensors[SensorType::Magnetometer as usize].1[i];
+            let gyro = &sensors[usize::from(SensorType::Gyroscope)].1[i];
+            let accel = &sensors[usize::from(SensorType::Accelerometer)].1[i];
+            let mag = &sensors[usize::from(SensorType::Magnetometer)].1[i];
             let q = self
                 .ahrs_filter
                 .update(gyro, accel, mag)

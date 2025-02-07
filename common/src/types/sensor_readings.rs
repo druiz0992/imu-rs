@@ -1,67 +1,21 @@
+use super::{SensorTag, SensorType};
 use crate::{IMUReadings, IMUSample};
 
 const DEFAULT_SENSOR_BUFFER_CAPACITY: usize = 64;
 
-#[derive(Clone, Debug, PartialEq, PartialOrd, Hash)]
-pub enum SensorType {
-    Accelerometer,
-    Gyroscope,
-    Magnetometer,
-}
-
-impl From<SensorType> for usize {
-    fn from(value: SensorType) -> Self {
-        match value {
-            SensorType::Accelerometer => 0,
-            SensorType::Gyroscope => 1,
-            SensorType::Magnetometer => 2,
-        }
-    }
-}
-
-impl TryFrom<&str> for SensorType {
-    type Error = String;
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "Accelerometer" => Ok(Self::Accelerometer),
-            "Gyroscope" => Ok(Self::Gyroscope),
-            "Magnetometer" => Ok(Self::Magnetometer),
-            _ => Err(format!("Unknown sensor type {}", value)),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, PartialOrd, Hash)]
-pub struct SensorTag(String);
-
-impl SensorTag {
-    pub fn new(tag: &str) -> Self {
-        Self(tag.to_string())
-    }
-
-    pub fn inner(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct SensorReadings<T> {
     buffer: Vec<T>,
     tag: SensorTag,
+    sensor_type: SensorType,
 }
 
 impl<T: IMUSample> SensorReadings<T> {
-    pub fn new(tag: &str) -> Self {
+    pub fn new(tag: &str, sensor_type: SensorType) -> Self {
         Self {
             tag: SensorTag::new(tag),
             buffer: Vec::with_capacity(DEFAULT_SENSOR_BUFFER_CAPACITY),
-        }
-    }
-
-    pub fn from_vec(tag: &str, data: Vec<T>) -> Self {
-        Self {
-            tag: SensorTag::new(tag),
-            buffer: data,
+            sensor_type,
         }
     }
 
@@ -88,12 +42,24 @@ impl<T: IMUSample> IMUReadings<T> for SensorReadings<T> {
     fn get_sensor_tag(&self) -> &str {
         self.tag.inner()
     }
+    fn get_sensor_type(&self) -> &SensorType {
+        &self.sensor_type
+    }
 
     fn extend(&mut self, elems: Vec<T>) {
         self.buffer.extend(elems);
     }
+
     fn clear(&mut self) {
         self.buffer.clear();
+    }
+
+    fn from_vec(tag: &str, sensor_type: SensorType, data: Vec<T>) -> Self {
+        Self {
+            tag: SensorTag::new(tag),
+            sensor_type,
+            buffer: data,
+        }
     }
 }
 
@@ -111,19 +77,20 @@ mod tests {
 
     #[test]
     fn test_sensor_new() {
-        let sensor = SensorReadings::<Sample3D>::new("test_sensor");
+        let sensor = SensorReadings::<Sample3D>::new("test_sensor", SensorType::Gyroscope);
         assert_eq!(sensor.get_sensor_tag(), "test_sensor");
     }
 
     #[test]
     fn test_sensor_is_empty() {
-        let sensor = SensorReadings::<Sample3D>::new("test_sensor");
+        let sensor =
+            SensorReadings::<Sample3D>::new("test_sensor", SensorType::Other("wer".to_string()));
         assert!(sensor.is_empty());
     }
 
     #[test]
     fn test_sensor_add_sample() {
-        let mut sensor = SensorReadings::<Sample3D>::new("test_sensor");
+        let mut sensor = SensorReadings::<Sample3D>::new("test_sensor", SensorType::Accelerometer);
         let sample = Sample3D::default();
         sensor.add_sample(sample.clone());
         assert_eq!(sensor.len(), 1);
@@ -132,7 +99,7 @@ mod tests {
 
     #[test]
     fn test_iter_samples() {
-        let mut sensor = SensorReadings::<Sample3D>::new("IMU1");
+        let mut sensor = SensorReadings::<Sample3D>::new("IMU1", SensorType::Magnetometer);
         sensor.add_sample(Sample3D::new(1.0, [1.0, 2.0, 3.0]));
         sensor.add_sample(Sample3D::new(2.0, [4.0, 5.0, 6.0]));
         sensor.add_sample(Sample3D::new(3.0, [7.0, 8.0, 8.0]));
@@ -145,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_into_iter_samples() {
-        let mut sensor = SensorReadings::new("IMU1");
+        let mut sensor = SensorReadings::new("IMU1", SensorType::Accelerometer);
         sensor.add_sample(Sample3D::new(1.0, [1.0, 2.0, 3.0]));
         sensor.add_sample(Sample3D::new(2.0, [4.0, 5.0, 6.0]));
         sensor.add_sample(Sample3D::new(3.0, [7.0, 8.0, 8.0]));
