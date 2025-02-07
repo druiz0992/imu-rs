@@ -4,16 +4,17 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 pub type Callback<T> =
-    Arc<dyn Fn(Arc<T>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+    Arc<dyn Fn(Uuid, Arc<T>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
-pub trait Notifiable<T> {
+pub trait Notifiable<T>: Sync + Send {
     fn get_callback(&self) -> Callback<T>;
+    fn set_id(&mut self, id: Uuid);
 }
 
 #[derive(Clone)]
 pub struct Listener<T> {
     callback: Callback<T>,
-    listener_id: Option<Uuid>,
+    id: Option<Uuid>,
 }
 
 impl<T> Listener<T>
@@ -22,28 +23,25 @@ where
 {
     pub fn new<F, Fut>(callback: F) -> Self
     where
-        F: Fn(Arc<T>) -> Fut + Send + Sync + 'static,
+        F: Fn(Uuid, Arc<T>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        let callback = Arc::new(move |data: Arc<T>| {
-            let fut = callback(data);
+        let callback = Arc::new(move |id: Uuid, data: Arc<T>| {
+            let fut = callback(id, data);
             Box::pin(fut) as Pin<Box<dyn Future<Output = ()> + Send>>
         });
 
-        Listener {
-            callback,
-            listener_id: None,
-        }
-    }
-
-    pub fn set_id(&mut self, listener_id: Uuid) {
-        self.listener_id = Some(listener_id);
+        Listener { callback, id: None }
     }
 }
 
 impl<T> Notifiable<T> for Listener<T> {
     fn get_callback(&self) -> Callback<T> {
         self.callback.clone()
+    }
+
+    fn set_id(&mut self, id: Uuid) {
+        self.id = Some(id);
     }
 }
 
@@ -64,7 +62,7 @@ mod tests {
             }
         }
 
-        async fn handle(&self, value: Arc<Vec<i32>>) {
+        async fn handle(&self, _id: Uuid, value: Arc<Vec<i32>>) {
             let mut data = self.data.lock().await;
             *data = (*value).clone();
             assert_eq!((*data)[0], 400);
@@ -74,14 +72,14 @@ mod tests {
     #[tokio::test]
     async fn test_new_listener() {
         let listener = Listener::new({
-            move |value: Arc<i32>| async move {
+            move |_id: Uuid, value: Arc<i32>| async move {
                 let data = *value;
                 assert_eq!(data, 42);
             }
         });
 
         let callback = listener.get_callback();
-        callback(Arc::new(42)).await;
+        callback(Uuid::new_v4(), Arc::new(42)).await;
     }
 
     #[tokio::test]
@@ -89,14 +87,14 @@ mod tests {
         let handler = Arc::new(TestHandler::new());
 
         let listener = Listener::new({
-            move |value: Arc<Vec<i32>>| {
+            move |id: Uuid, value: Arc<Vec<i32>>| {
                 let handler = handler.clone();
-                async move { handler.handle(value).await }
+                async move { handler.handle(id, value).await }
             }
         });
 
         let callback = listener.get_callback();
-        callback(Arc::new(vec![400])).await;
+        callback(Uuid::new_v4(), Arc::new(vec![400])).await;
     }
 
     #[tokio::test]
@@ -106,16 +104,6 @@ mod tests {
         let listener = listener!(handler.handle);
 
         let callback = listener.get_callback();
-        callback(Arc::new(vec![400])).await;
-    }
-
-    #[test]
-    fn test_set_id() {
-        let listener = Listener::new(|_: Arc<i32>| async {});
-        let mut listener = listener;
-        let id = Uuid::new_v4();
-        listener.set_id(id);
-
-        assert_eq!(listener.listener_id, Some(id));
+        callback(Uuid::new_v4(), Arc::new(vec![400])).await;
     }
 }

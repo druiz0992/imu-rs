@@ -1,8 +1,10 @@
 use common::{IMUReadings, IMUSample, Sample3D, SensorReadings, SensorType};
 use phyphox_rs::services;
 use publisher::Listener;
+use std::collections::HashMap;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_receive_accelerometer_samples() {
@@ -12,6 +14,7 @@ async fn test_receive_accelerometer_samples() {
     let add_sensor_noise = false;
     let run_for_millis = 5000;
     let received_samples: Arc<Mutex<Vec<Sample3D>>> = Arc::new(Mutex::new(Vec::new()));
+    let received_id = Arc::new(Mutex::new(Uuid::new_v4()));
 
     // Start phyphox mock service
     let (handle, phyphox) = services::run_mock_service::<SensorReadings<Sample3D>, _>(
@@ -26,21 +29,23 @@ async fn test_receive_accelerometer_samples() {
     // create listener handler
     let listener = {
         let received_samples = received_samples.clone();
-        Listener::new(move |value: Arc<SensorReadings<Sample3D>>| {
+        let received_id = received_id.clone();
+        Listener::new(move |id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
             let buffer = received_samples.clone();
+            let received_id = received_id.clone();
             async move {
                 let mut buffer_lock = buffer.lock().await;
+                let mut received_id_lock = received_id.lock().await;
+                *received_id_lock = id;
                 let tag = value.get_sensor_tag();
-                let sensor_type = value.get_sensor_type();
                 assert_eq!(tag, "Test");
-                assert_eq!(*sensor_type, SensorType::Accelerometer);
                 buffer_lock.extend(value.into_iter_samples());
             }
         })
     };
 
     // install handler
-    phyphox
+    let expected_id = phyphox
         .register_listener(listener, SensorType::Accelerometer)
         .await;
 
@@ -48,7 +53,10 @@ async fn test_receive_accelerometer_samples() {
 
     // check that samples were received by handler
     let buffer = received_samples.lock().await;
+    let received_id = received_id.lock().await;
     assert!(buffer.len() > 0);
+    // the listener receives an id as part of the callback, which can match to which listener function it received
+    assert!(expected_id == *received_id)
 }
 
 #[tokio::test]
@@ -58,8 +66,8 @@ async fn test_receive_multiple_sensors() {
     let capture_sampling_period_secs = 0.1;
     let add_sensor_noise = false;
     let run_for_millis = 5000;
-    let received_samples: Arc<Mutex<Vec<Vec<Sample3D>>>> =
-        Arc::new(Mutex::new(vec![vec![], vec![]]));
+    let received_samples: Arc<Mutex<HashMap<Uuid, Vec<Sample3D>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 
     // Start phyphox mock service
     let (handle, phyphox) = services::run_mock_service::<SensorReadings<Sample3D>, _>(
@@ -74,29 +82,25 @@ async fn test_receive_multiple_sensors() {
     // create listener handler
     let listener = {
         let received_samples = received_samples.clone();
-        Listener::new(move |value: Arc<SensorReadings<Sample3D>>| {
-            let buffer = received_samples.clone();
+        Listener::new(move |id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
+            let storage = received_samples.clone();
             async move {
-                let mut buffer_lock = buffer.lock().await;
+                let mut storage_lock = storage.lock().await;
                 let tag = value.get_sensor_tag();
-                let sensor_type = value.get_sensor_type();
-                let sensor_idx = usize::from(sensor_type);
                 assert_eq!(tag, "Test");
-                if sensor_idx == 0 {
-                    assert_eq!(*sensor_type, SensorType::Accelerometer);
-                } else {
-                    assert_eq!(*sensor_type, SensorType::Gyroscope);
-                }
-                buffer_lock[usize::from(sensor_type)].extend(value.into_iter_samples());
+                storage_lock
+                    .entry(id)
+                    .or_insert_with(Vec::new)
+                    .extend(value.into_iter_samples());
             }
         })
     };
 
     // install handlers
-    phyphox
+    let accel_id = phyphox
         .register_listener(listener.clone(), SensorType::Accelerometer)
         .await;
-    phyphox
+    let gyro_id = phyphox
         .register_listener(listener.clone(), SensorType::Gyroscope)
         .await;
 
@@ -104,9 +108,10 @@ async fn test_receive_multiple_sensors() {
 
     // check that samples were received by handler
     let buffer = received_samples.lock().await;
-    assert!(buffer[0].len() > 0);
-    assert!(buffer[1].len() > 0);
-    assert!(buffer[0] != buffer[1])
+    let accel_samples = buffer.get(&accel_id).unwrap();
+    let gyro_samples = buffer.get(&gyro_id).unwrap();
+    assert!(accel_samples.len() > 0);
+    assert!(gyro_samples.len() > 0);
 }
 
 #[tokio::test]
@@ -131,14 +136,12 @@ async fn test_stop_receiving_accelerometer_samples() {
     // create listener handler
     let listener = {
         let received_samples = received_samples.clone();
-        Listener::new(move |value: Arc<SensorReadings<Sample3D>>| {
+        Listener::new(move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
             let buffer = received_samples.clone();
             async move {
                 let mut buffer_lock = buffer.lock().await;
                 let tag = value.get_sensor_tag();
-                let sensor_type = value.get_sensor_type();
                 assert_eq!(tag, "Test");
-                assert_eq!(*sensor_type, SensorType::Accelerometer);
                 buffer_lock.extend(value.into_iter_samples());
             }
         })

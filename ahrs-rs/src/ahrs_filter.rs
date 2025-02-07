@@ -17,7 +17,7 @@ where
     S: IMUSample,
 {
     ahrs_filter: Madgwick<f64>,
-    publisher: Mutex<Publisher<T>>,
+    publisher: Publisher<T>,
     buffer: Vec<Arc<Mutex<T>>>,
     _phantom_data: PhantomData<S>,
 }
@@ -39,7 +39,7 @@ where
                     )))
                 })
                 .collect(),
-            publisher: Mutex::new(Publisher::new()),
+            publisher: Publisher::new(),
             _phantom_data: PhantomData,
         }
     }
@@ -85,14 +85,12 @@ where
         Ok(sample_quaternion)
     }
 
-    pub fn register_sensor(&self, listener: Listener<T>) -> Uuid {
-        let publisher = self.publisher.blocking_lock();
-        publisher.register_listener(&listener)
+    pub async fn register_sensor(&self, mut listener: Listener<T>) -> Uuid {
+        self.publisher.register_listener(&mut listener).await
     }
 
-    pub fn unregister_sensor(&self, id: Uuid) {
-        let publisher = self.publisher.blocking_lock();
-        publisher.unregister_listener(id);
+    pub async fn unregister_sensor(&self, id: Uuid) {
+        self.publisher.unregister_listener(id).await;
     }
 }
 

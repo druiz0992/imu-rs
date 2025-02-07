@@ -4,7 +4,7 @@ use publisher::{Listener, Publishable, Publisher};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 /// Generic Phyphox service
@@ -28,7 +28,7 @@ where
     S: IMUSample + TryFrom<Vec<f64>>,
 {
     client: C,
-    publisher: Arc<[Mutex<Publisher<T>>; N_SENSORS]>,
+    publisher: [Publisher<T>; N_SENSORS],
     abort_signal: Arc<Notify>,
     _phantom_t: PhantomData<T>,
     _phantom_s: PhantomData<S>,
@@ -48,7 +48,7 @@ where
         PhyphoxService {
             client,
             abort_signal,
-            publisher: Arc::new(std::array::from_fn(|_| Mutex::new(Publisher::new()))),
+            publisher: std::array::from_fn(|_| Publisher::new()),
             _phantom_t: PhantomData,
             _phantom_s: PhantomData,
         }
@@ -56,17 +56,21 @@ where
 
     // Registers a accelerometer/gyroscope/magentometer listener functions to be called whenever new samples are available.
     // Returns the id of the registered listener.
-    pub async fn register_listener(&self, listener: Listener<T>, sensor_type: SensorType) -> Uuid {
+    pub async fn register_listener(
+        &self,
+        mut listener: Listener<T>,
+        sensor_type: SensorType,
+    ) -> Uuid {
         let sensor_idx = usize::from(sensor_type);
-        let publisher = self.publisher[sensor_idx].lock().await;
-        publisher.register_listener(&listener)
+        self.publisher[sensor_idx]
+            .register_listener(&mut listener)
+            .await
     }
 
     // Unregisters a accelerometer/gyroscope/magnetometer listeners from the list of registered listeners.
     pub async fn unregister_listener(&self, id: Uuid, sensor_type: SensorType) {
         let sensor_idx = usize::from(sensor_type);
-        let publisher = self.publisher[sensor_idx].lock().await;
-        publisher.unregister_listener(id);
+        self.publisher[sensor_idx].unregister_listener(id).await;
     }
 
     /// Starts the data acquisition process. The process is stopped with a SIGINT signal

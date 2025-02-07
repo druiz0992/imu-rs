@@ -1,0 +1,44 @@
+name: Rust CI with Coverage
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/*"  # Run on feature branches too
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # Step 2: Set up Rust environment
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          cargo install cargo-tarpaulin
+
+      # Step 4: Run tests and collect coverage with tarpaulin
+      - name: Run tests and generate coverage report
+        run: |
+          cargo tarpaulin --out Xml
+
+      # Step 5: Upload coverage report as artifact
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage-report
+          path: target/debug/deps/coverage.xml  # Location of the coverage report
