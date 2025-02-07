@@ -25,19 +25,39 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      # Step 3: Install cargo-tarpaulin for coverage reporting
+      # Step 3: Cache dependencies to speed up builds
+      - name: Cache Cargo registry
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # Step 4: Install cargo-tarpaulin for coverage reporting
       - name: Install cargo-tarpaulin
         run: |
           cargo install cargo-tarpaulin
 
-      # Step 4: Run tests and generate coverage report using cargo-tarpaulin
+      # Step 5: Run tests and generate coverage report using cargo-tarpaulin
       - name: Run tests and generate coverage report
         run: |
           cargo tarpaulin --out Xml --skip-clean
 
-      # Step 5: Upload coverage report as artifact
+      # Step 6: Upload coverage report as artifact
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: target/debug/deps/coverage.xml  # Location of the coverage report
+
+      # Step 7: Run Clippy to check for linting issues
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Step 8: Check code formatting with rustfmt
+      - name: Run rustfmt
+        run: cargo fmt --all -- --check
+
