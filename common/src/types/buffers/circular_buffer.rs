@@ -5,16 +5,15 @@ use std::collections::VecDeque;
 #[derive(Clone, Debug)]
 pub struct CircularBuffer<T> {
     #[allow(dead_code)]
-    size: usize,
     buffer: VecDeque<T>,
 }
 
 impl<T: Clone + Default> CircularBuffer<T> {
     /// Creates new CircularBuffer with `size` number of default elements of type `T`.
     pub fn new(size: usize) -> Self {
-        let mut buffer = VecDeque::with_capacity(size);
-        buffer.extend(std::iter::repeat(T::default()).take(size));
-        Self { buffer, size }
+        Self {
+            buffer: VecDeque::from(vec![T::default(); size]),
+        }
     }
 
     /// New element `elem` is pushed, and oldest is popped out
@@ -26,7 +25,7 @@ impl<T: Clone + Default> CircularBuffer<T> {
 
     /// Returns size of CircularBuffer
     pub fn len(&self) -> usize {
-        self.size
+        self.buffer.len()
     }
 }
 

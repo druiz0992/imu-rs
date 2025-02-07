@@ -1,4 +1,23 @@
 use crate::{constants::*, types::xyz::XYZ, IMUSample};
+/// A structure representing a 3D sample with a timestamp and measurement.
+///
+/// # Fields
+///
+/// * `timestamp` - A floating-point number representing the timestamp of the sample.
+/// * `measurement` - An `XYZ` structure representing the 3D measurement.
+///
+/// # Examples
+///
+/// ```
+/// use common::{Sample3D, IMUSample};
+///
+/// let timestamp = 1627846267.0;
+/// let measurement = [1.0, 2.0, 3.0];
+/// let sample = Sample3D::new(timestamp, measurement);
+///
+/// assert_eq!(sample.get_timestamp(), timestamp);
+/// assert_eq!(sample.get_measurement(), measurement);
+/// ```
 
 #[derive(Debug, Clone, Default, PartialEq, PartialOrd)]
 pub struct Sample3D {
@@ -6,7 +25,9 @@ pub struct Sample3D {
     measurement: XYZ,
 }
 
+/// Represents a 3D sample with a timestamp and a measurement.
 impl Sample3D {
+    ///  Creates a new `Sample3D` instance from a timestamp and a measurement array.
     pub fn new(timestamp: f64, measurement: [f64; N_XYZ_COORDINATES]) -> Self {
         Self {
             timestamp,
@@ -14,6 +35,7 @@ impl Sample3D {
         }
     }
 
+    /// Creates a new `Sample3D` instance from a timestamp and an `XYZ` measurement.
     pub fn from_xyz(timestamp: f64, measurement: XYZ) -> Self {
         Self {
             timestamp,
@@ -21,6 +43,7 @@ impl Sample3D {
         }
     }
 
+    /// Creates a new `Sample3D` instance from a vector containing a timestamp and a measurement.
     pub fn from_vec(sample_vec: [f64; 4]) -> Self {
         Self {
             timestamp: sample_vec[0],

@@ -33,11 +33,13 @@ where
 impl<S, T> Resampler<S, T>
 where
     S: IMUSample,
-    T: Send + Sync + IMUReadings<S> + Default + 'static,
+    T: Send + Sync + IMUReadings<S> + 'static,
 {
     pub fn new(n_buffer: usize, tag: String) -> Self {
         Self {
-            buffer: (0..n_buffer).map(|_| Mutex::new(T::default())).collect(),
+            buffer: (0..n_buffer)
+                .map(|_| Mutex::new(T::from_vec("", SensorType::Accelerometer, vec![])))
+                .collect(),
             publisher: (0..n_buffer).map(|_| Publisher::new()).collect(),
             _phantom_data: PhantomData,
         }
@@ -46,12 +48,14 @@ where
     // Registers a accelerometer/gyroscope/magentometer listener functions to be called whenever new samples are available.
     // Returns the id of the registered listener.
     fn register_sensor(&self, listener: Listener<T>, sensor_type: SensorType) -> Uuid {
-        self.publisher[sensor_type as usize].register_listener(&listener)
+        let sensor_idx = usize::from(sensor_type);
+        self.publisher[sensor_idx].register_listener(&listener)
     }
 
     // Unregisters a accelerometer/gyroscope/magnetometer listeners from the list of registered listeners.
     fn unregister_sensor(&self, id: Uuid, sensor_type: SensorType) {
-        self.publisher[sensor_type as usize].unregister_listener(id);
+        let sensor_idx = usize::from(sensor_type);
+        self.publisher[sensor_idx].unregister_listener(id);
     }
 
     pub async fn handle(&self, measurement: Arc<T>) {
@@ -62,7 +66,8 @@ where
         }
     }
     pub async fn handle_notification(&self, measurement: T, sensor_type: SensorType) {
-        let mut buffer = self.buffer[sensor_type as usize].lock().await;
+        let sensor_idx = usize::from(sensor_type);
+        let mut buffer = self.buffer[sensor_idx].lock().await;
         buffer.extend(measurement.get_samples())
     }
 

@@ -1,6 +1,66 @@
 use std::error::Error;
 
 use csv::Reader;
+use num_enum::TryFromPrimitive;
+
+#[repr(usize)]
+#[derive(Debug, Clone, Copy, TryFromPrimitive)]
+pub enum CsvFileColum {
+    Timestamp,
+    XGyro,
+    YGyro,
+    ZGyro,
+    XAccel,
+    YAccel,
+    ZAccel,
+    XMag,
+    YMag,
+    ZMag,
+}
+
+impl From<CsvFileColum> for usize {
+    fn from(value: CsvFileColum) -> Self {
+        value as usize
+    }
+}
+
+pub struct CsvColumnMapper {
+    columns: Vec<usize>,
+}
+
+impl CsvColumnMapper {
+    pub fn new() -> Self {
+        Self { columns: vec![] }
+    }
+
+    pub fn columns(&self) -> Vec<usize> {
+        self.columns.clone()
+    }
+
+    pub fn add_timestamp(&mut self) -> &mut Self {
+        self.columns.push(CsvFileColum::Timestamp.into());
+        self
+    }
+
+    pub fn add_gyro(&mut self) -> &mut Self {
+        self.columns.push(CsvFileColum::XGyro.into());
+        self.columns.push(CsvFileColum::YGyro.into());
+        self.columns.push(CsvFileColum::ZGyro.into());
+        self
+    }
+    pub fn add_accel(&mut self) -> &mut Self {
+        self.columns.push(CsvFileColum::XAccel.into());
+        self.columns.push(CsvFileColum::YAccel.into());
+        self.columns.push(CsvFileColum::ZAccel.into());
+        self
+    }
+    pub fn add_mag(&mut self) -> &mut Self {
+        self.columns.push(CsvFileColum::XMag.into());
+        self.columns.push(CsvFileColum::YMag.into());
+        self.columns.push(CsvFileColum::ZMag.into());
+        self
+    }
+}
 
 pub fn load_csv(file_path: &str) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
     let mut rdr = Reader::from_path(file_path)?;
@@ -71,10 +131,42 @@ mod tests {
     #[test]
     fn test_load_csv_correct_columns() {
         let file_name = "./test_data/sensor_readings.csv";
-        let columns = vec![0, 1, 2];
+        let columns: Vec<usize> = vec![
+            CsvFileColum::Timestamp,
+            CsvFileColum::XGyro,
+            CsvFileColum::YGyro,
+        ]
+        .into_iter()
+        .map(usize::from)
+        .collect();
         let data = load_csv_columns::<Vec<f64>>(file_name, &columns).unwrap();
 
         assert!(data[0].len() == columns.len());
+    }
+
+    #[test]
+    fn test_load_csv_timestamp() {
+        let file_name = "./test_data/sensor_readings.csv";
+        let mut mapper = CsvColumnMapper::new();
+        mapper.add_timestamp();
+        let data = load_csv_columns::<Vec<f64>>(file_name, &mapper.columns()).unwrap();
+
+        assert!(data[0].len() == mapper.columns().len());
+    }
+
+    #[test]
+    fn test_load_csv_timestamp_gyro_mag() {
+        let file_name = "./test_data/sensor_readings.csv";
+        let mut mapper = CsvColumnMapper::new();
+        mapper.add_timestamp().add_gyro().add_mag();
+        let data = load_csv_columns::<Vec<f64>>(file_name, &mapper.columns()).unwrap();
+        assert!(data[0].len() == mapper.columns().len());
+
+        let mut mapper2 = CsvColumnMapper::new();
+        mapper2.add_mag().add_timestamp().add_gyro();
+        let data2 = load_csv_columns::<Vec<f64>>(file_name, &mapper.columns()).unwrap();
+        assert!(data2[0].len() == mapper2.columns().len());
+        assert!(data == data2);
     }
 
     #[test]

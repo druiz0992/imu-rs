@@ -10,6 +10,7 @@ pub trait Notifiable<T> {
     fn get_callback(&self) -> Callback<T>;
 }
 
+#[derive(Clone)]
 pub struct Listener<T> {
     callback: Callback<T>,
     listener_id: Option<Uuid>,
@@ -45,6 +46,7 @@ impl<T> Notifiable<T> for Listener<T> {
         self.callback.clone()
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
