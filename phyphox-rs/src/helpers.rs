@@ -1,3 +1,4 @@
+use common::IMUUntimedSample;
 use serde_json::Value;
 
 use common::constants::N_XYZ_COORDINATES;
@@ -101,7 +102,7 @@ pub(crate) fn combine_results(results: Vec<Vec<f64>>) -> (Vec<f64>, Vec<XYZ>) {
             .cloned()
             .collect();
 
-        if let Some(xyz) = XYZ::from_vec(values) {
+        if let Some(xyz) = XYZ::from_timed(values) {
             untimed_data.push(xyz);
             timestamp.push(results[0][row].clone());
         }
@@ -128,4 +129,97 @@ pub(crate) fn build_query(variables: &[&str], time_var: &str, since: Option<f64>
         .join("");
     query.push_str(&variable_query);
     query
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_control_str() {
+        assert_eq!(control_str(0).unwrap(), (ACC_TIME, ACC_VARIABLES));
+        assert_eq!(control_str(1).unwrap(), (GYRO_TIME, GYRO_VARIABLES));
+        assert_eq!(control_str(2).unwrap(), (MAG_TIME, MAG_VARIABLES));
+        assert!(control_str(3).is_err());
+    }
+
+    #[test]
+    fn test_update_measurement_time() {
+        let mut timestamp = 0.0;
+        update_measurement_time(&vec![1.0, 2.0, 3.0], &mut timestamp);
+        assert_eq!(timestamp, 3.0 + EPS_MEASUREMENT_TIME);
+    }
+
+    #[test]
+    fn test_get_status_from_json() {
+        let data = json!({
+            "status": {
+                "measuring": true
+            }
+        });
+        assert_eq!(get_status_from_json(&data).unwrap(), true);
+
+        let data = json!({
+            "status": {
+                "measuring": false
+            }
+        });
+        assert_eq!(get_status_from_json(&data).unwrap(), false);
+
+        let data = json!({});
+        assert!(get_status_from_json(&data).is_err());
+    }
+
+    #[test]
+    fn test_parse_results() {
+        let data = json!({
+            "buffer": {
+                "acc_time": {
+                    "buffer": [1.0, 2.0, 3.0]
+                },
+                "accX": {
+                    "buffer": [0.1, 0.2, 0.3]
+                },
+                "accY": {
+                    "buffer": [0.4, 0.5, 0.6]
+                },
+                "accZ": {
+                    "buffer": [0.7, 0.8, 0.9]
+                }
+            }
+        });
+        let variables = ["accX", "accY", "accZ"];
+        let results = parse_results(&data, &variables, "acc_time").unwrap();
+        assert_eq!(results.len(), 4);
+        assert_eq!(results[0], vec![1.0, 2.0, 3.0]);
+        assert_eq!(results[1], vec![0.1, 0.2, 0.3]);
+        assert_eq!(results[2], vec![0.4, 0.5, 0.6]);
+        assert_eq!(results[3], vec![0.7, 0.8, 0.9]);
+    }
+
+    #[test]
+    fn test_combine_results() {
+        let results = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![0.1, 0.2, 0.3],
+            vec![0.4, 0.5, 0.6],
+            vec![0.7, 0.8, 0.9],
+        ];
+        let (timestamps, untimed_data) = combine_results(results);
+        assert_eq!(timestamps, vec![1.0, 2.0, 3.0]);
+        assert_eq!(untimed_data.len(), 3);
+    }
+
+    #[test]
+    fn test_build_query() {
+        let variables = ["accX", "accY", "accZ"];
+        let query = build_query(&variables, "acc_time", Some(1.0));
+        assert_eq!(
+            query,
+            "acc_time=1.0000&accX=1.0000|acc_time&accY=1.0000|acc_time&accZ=1.0000|acc_time"
+        );
+
+        let query = build_query(&variables, "acc_time", None);
+        assert_eq!(query, "acc_time&accX&accY&accZ");
+    }
 }
