@@ -5,8 +5,6 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use crate::constants::N_XYZ_COORDINATES;
 use crate::{IMUSample, IMUUntimedSample};
 
-use super::Sample3D;
-
 #[derive(Clone, Debug, PartialEq, PartialOrd, Default)]
 pub struct XYZ(Vector3<f64>);
 

@@ -30,6 +30,10 @@ impl<T: IMUSample> SensorReadings<T> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    pub fn get_sensor_type(&self) -> SensorType {
+        self.sensor_type.clone()
+    }
 }
 
 impl<T: IMUSample> IMUReadings<T> for SensorReadings<T> {

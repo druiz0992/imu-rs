@@ -24,6 +24,7 @@ impl From<CsvFileColum> for usize {
     }
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct CsvColumnMapper {
     columns: Vec<usize>,
 }
@@ -96,14 +97,14 @@ pub fn load_csv_columns<T: TryFrom<Vec<f64>>>(
                 .map(|&i| {
                     rows.get(i)
                         .ok_or_else(|| format!("Column index {} out of bounds", i).into())
-                        .map(|&val| val)
+                        .copied()
                 })
                 .collect::<Result<Vec<f64>, Box<dyn Error>>>()
         })
         .collect::<Result<Vec<Vec<f64>>, Box<dyn Error>>>()?
         .into_iter()
         .map(|f64_values| {
-            T::try_from(f64_values).map_err(|_| format!("Failed to convert to T").into())
+            T::try_from(f64_values).map_err(|_| "Failed to convert to T".to_string().into())
         })
         .collect::<Result<Vec<T>, Box<dyn Error>>>()?;
 

@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::Value;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 
 use common::{IMUFilter, IMUReadings, IMUSample, SensorType, XYZ};
 use publisher::{Publishable, Publisher};
@@ -67,7 +67,7 @@ where
 
     /// Returns available sensors in phyphox
     async fn get_available_sensors(&self) -> Result<Vec<SensorType>, PhyphoxError> {
-        let json = self.fetch_json(&format!("{CONFIG_CMD}")).await?;
+        let json = self.fetch_json(CONFIG_CMD).await?;
         let mut available_sensors: Vec<SensorType> = vec![];
 
         if let Some(exports) = json.get("export").and_then(|e| e.as_array()) {

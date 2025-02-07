@@ -105,12 +105,12 @@ mod tests {
     async fn test1() {
         let test_data = "../test-utils/test_data/sensor_readings.csv";
         let gyro_readings =
-            csv_loader::load_csv_columns::<Sample3D>(test_data, &vec![0, 1, 2, 3]).unwrap();
+            csv_loader::load_csv_columns::<Sample3D>(test_data, &[0, 1, 2, 3]).unwrap();
         let accel_readings =
-            csv_loader::load_csv_columns::<Sample3D>(test_data, &vec![0, 4, 5, 6]).unwrap();
+            csv_loader::load_csv_columns::<Sample3D>(test_data, &[0, 4, 5, 6]).unwrap();
         let mag_readings =
-            csv_loader::load_csv_columns::<Sample3D>(test_data, &vec![0, 7, 8, 9]).unwrap();
-        let readings = vec![
+            csv_loader::load_csv_columns::<Sample3D>(test_data, &[0, 7, 8, 9]).unwrap();
+        let readings = [
             accel_readings.clone(),
             gyro_readings.clone(),
             mag_readings.clone(),
@@ -125,7 +125,7 @@ mod tests {
             let gyro = Vector3::from_vec(gyro_readings[i].get_measurement());
             let accel = Vector3::from_vec(accel_readings[i].get_measurement());
             let mag = Vector3::from_vec(mag_readings[i].get_measurement());
-            q_expected.push(madgwick.update(&gyro, &accel, &mag).unwrap().clone());
+            q_expected.push(*madgwick.update(&gyro, &accel, &mag).unwrap());
         }
 
         let mut filter = AHRSFilter::<SensorReadings<Sample3D>, _>::new(0.05, 3);

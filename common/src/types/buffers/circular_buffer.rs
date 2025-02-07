@@ -18,7 +18,7 @@ impl<T: Clone + Default> CircularBuffer<T> {
 
     /// New element `elem` is pushed, and oldest is popped out
     pub fn push(&mut self, elem: T) -> T {
-        let out = self.buffer.pop_front().unwrap_or(T::default());
+        let out = self.buffer.pop_front().unwrap_or_default();
         self.buffer.push_back(elem);
         out
     }
@@ -26,6 +26,11 @@ impl<T: Clone + Default> CircularBuffer<T> {
     /// Returns size of CircularBuffer
     pub fn len(&self) -> usize {
         self.buffer.len()
+    }
+
+    /// Checks if CircularBuffer is empty
+    pub fn is_empty(&self) -> bool {
+        self.buffer.len() == 0
     }
 }
 

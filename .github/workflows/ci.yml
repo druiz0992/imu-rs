@@ -6,8 +6,7 @@ on:
       - main
       - "feature/*"  # Run on feature branches too
   pull_request:
-    branches:
-      - main
+    types: [opened, synchronize, reopened]
 
 jobs:
   test:
@@ -26,19 +25,58 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      # Step 3: Install dependencies
-      - name: Install dependencies
-        run: |
-          cargo install cargo-tarpaulin
+      # Step 3: Cache Cargo registry to speed up builds
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      # Step 4: Run tests and collect coverage with tarpaulin
+      # Step 4: Cache target folder for build artifacts to speed up subsequent builds
+      - name: Cache Cargo target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-
+
+      # Step 5: Cache cargo-tarpaulin
+      - name: Cache cargo-tarpaulin
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-tarpaulin
+          key: ${{ runner.os }}-cargo-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-tarpaulin-
+
+      # Step 6: Install cargo-tarpaulin
+      - name: Install cargo-tarpaulin
+        run: |
+          if ! command -v cargo-tarpaulin &> /dev/null; then
+            cargo install cargo-tarpaulin
+          fi
+
+      # Step 7: Run tests and generate coverage report using cargo-tarpaulin
       - name: Run tests and generate coverage report
         run: |
-          cargo tarpaulin --out Xml
+          cargo tarpaulin --out Xml --skip-clean
 
-      # Step 5: Upload coverage report as artifact
+      # Step 8: Upload coverage report as artifact
       - name: Upload coverage report
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: target/debug/deps/coverage.xml  # Location of the coverage report
+
+      # Step 9: Run Clippy (use incremental compilation and avoid full rebuild)
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Step 10: Check code formatting with rustfmt
+      - name: Run rustfmt
+        run: cargo fmt --all -- --check
