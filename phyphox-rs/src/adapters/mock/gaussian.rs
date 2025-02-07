@@ -28,8 +28,8 @@ impl GaussianNoise {
     // Adds noise to vector of samples
     pub(super) fn add_noise_vec(&self, rng: &mut StdRng, data: Vec<f64>) -> Vec<f64> {
         let mut result = Vec::with_capacity(data.len());
-        for i in 0..data.len() {
-            result.push(data[i] + self.draw_sample(rng));
+        for d in data {
+            result.push(d + self.draw_sample(rng));
         }
         result
     }

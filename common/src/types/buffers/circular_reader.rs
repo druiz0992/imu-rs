@@ -17,7 +17,7 @@ impl<T: Clone> CircularReader<T> {
     }
 
     /// Reads the next element, moving the index forward cyclically.
-    pub fn next(&mut self) -> T {
+    pub fn next_element(&mut self) -> T {
         let elem = &self.buffer[self.index];
         self.index = (self.index + 1) % self.buffer.len();
         elem.clone()
@@ -50,7 +50,7 @@ mod tests {
         let mut reader = CircularReader::new(data.clone()).unwrap();
 
         for i in 0..6 {
-            assert_eq!(reader.next(), data[i % data.len()]);
+            assert_eq!(reader.next_element(), data[i % data.len()]);
         }
     }
 }

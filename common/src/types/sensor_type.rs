@@ -33,10 +33,10 @@ pub enum SensorType {
 impl From<&SensorType> for usize {
     fn from(value: &SensorType) -> Self {
         match value {
-            &SensorType::Accelerometer => 0,
-            &SensorType::Gyroscope => 1,
-            &SensorType::Magnetometer => 2,
-            &SensorType::Other(_) => 3,
+            SensorType::Accelerometer => 0,
+            SensorType::Gyroscope => 1,
+            SensorType::Magnetometer => 2,
+            SensorType::Other(_) => 3,
         }
     }
 }

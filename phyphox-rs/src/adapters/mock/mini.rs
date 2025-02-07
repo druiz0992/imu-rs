@@ -94,7 +94,7 @@ where
         let mut rng = StdRng::from_entropy();
         if pending_samples > 0 {
             let mut readings = self.readings.lock().await;
-            let next_sample = readings[buffer_idx].next();
+            let next_sample = readings[buffer_idx].next_element();
             let mut timestamps = self.timestamps.lock().await;
             for _ in 0..pending_samples {
                 let sample_timestamp = self
@@ -115,7 +115,7 @@ where
                 }
             }
         }
-        return new_samples;
+        new_samples
     }
 }
 
@@ -126,7 +126,7 @@ fn select_random_pending_samples() -> usize {
         .as_micros();
     let lsb: u8 = now.to_le_bytes()[0];
     if lsb & LSB_TIME_MASK == 0 {
-        return 0;
+        0
     } else {
         (lsb % MAX_N_SAMPLES) as usize
     }

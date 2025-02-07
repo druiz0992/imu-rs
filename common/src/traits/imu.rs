@@ -50,6 +50,7 @@ pub trait IMUReadings<T: IMUSample>: Send + Sync + Clone {
         self.get_samples_ref().iter()
     }
     ///   Returns an iterator over samples.
+    #[allow(clippy::wrong_self_convention)]
     fn into_iter_samples(&self) -> impl Iterator<Item = T> {
         self.get_samples().into_iter()
     }

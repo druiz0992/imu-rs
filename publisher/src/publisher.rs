@@ -13,7 +13,7 @@ pub trait Publishable<T> {
     async fn notify_listeners(&self, data: Arc<T>);
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Publisher<T>
 where
     T: Send + Sync + 'static,

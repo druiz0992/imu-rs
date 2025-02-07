@@ -1,13 +1,12 @@
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 
 use async_trait::async_trait;
-use uuid::Uuid;
 
 use common::types::SensorType;
 use common::{IMUReadings, IMUSample};
-use publisher::{Listener, Publishable, Publisher};
+use publisher::Publisher;
 
 use crate::constants::N_SENSORS;
 use crate::models::errors::PhyphoxError;
