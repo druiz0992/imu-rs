@@ -6,8 +6,7 @@ on:
       - main
       - "feature/*"  # Run on feature branches too
   pull_request:
-    branches:
-      - main
+    types: [opened, synchronize, reopened]
 
 jobs:
   test:
@@ -26,15 +25,15 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      # Step 3: Install dependencies
-      - name: Install dependencies
+      # Step 3: Install cargo-tarpaulin for coverage reporting
+      - name: Install cargo-tarpaulin
         run: |
           cargo install cargo-tarpaulin
 
-      # Step 4: Run tests and collect coverage with tarpaulin
+      # Step 4: Run tests and generate coverage report using cargo-tarpaulin
       - name: Run tests and generate coverage report
         run: |
-          cargo tarpaulin --out Xml
+          cargo tarpaulin --out Xml --skip-clean
 
       # Step 5: Upload coverage report as artifact
       - name: Upload coverage report
