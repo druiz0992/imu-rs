@@ -42,9 +42,6 @@ impl<T: IMUSample> IMUReadings<T> for SensorReadings<T> {
     fn get_sensor_tag(&self) -> &str {
         self.tag.inner()
     }
-    fn get_sensor_type(&self) -> &SensorType {
-        &self.sensor_type
-    }
 
     fn extend(&mut self, elems: Vec<T>) {
         self.buffer.extend(elems);

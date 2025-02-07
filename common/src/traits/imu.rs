@@ -35,8 +35,6 @@ pub trait IMUSample: Send + Sync + Clone + Default + 'static {
 pub trait IMUReadings<T: IMUSample>: Send + Sync + Clone {
     ///   Returns the sensor tag
     fn get_sensor_tag(&self) -> &str;
-    ///   Returns the sensor type
-    fn get_sensor_type(&self) -> &SensorType;
     ///   Returns a slive to samples.
     fn get_samples_ref(&self) -> &[T];
     ///   Returns samples

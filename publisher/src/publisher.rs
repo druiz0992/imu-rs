@@ -1,17 +1,19 @@
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::listener::{Callback, Notifiable};
 
 #[async_trait]
 pub trait Publishable<T> {
-    fn register_listener(&self, listener: &dyn Notifiable<T>) -> Uuid;
-    fn unregister_listener(&self, listener_id: Uuid);
+    async fn register_listener(&self, listener: &mut dyn Notifiable<T>) -> Uuid;
+    async fn unregister_listener(&self, listener_id: Uuid);
     async fn notify_listeners(&self, data: Arc<T>);
 }
 
+#[derive(Clone)]
 pub struct Publisher<T>
 where
     T: Send + Sync + 'static,
@@ -35,33 +37,37 @@ impl<T> Publishable<T> for Publisher<T>
 where
     T: Send + Sync + 'static,
 {
-    fn register_listener(&self, listener: &dyn Notifiable<T>) -> Uuid {
+    async fn register_listener(&self, listener: &mut dyn Notifiable<T>) -> Uuid {
         let callback = listener.get_callback();
         let listener_id = Uuid::new_v4();
-        let mut listeners = self.listeners.lock().unwrap();
+        listener.set_id(listener_id);
+        let mut listeners = self.listeners.lock().await;
         listeners.insert(listener_id, callback);
         listener_id
     }
 
-    fn unregister_listener(&self, listener_id: Uuid) {
-        let mut listeners = self.listeners.lock().unwrap();
+    async fn unregister_listener(&self, listener_id: Uuid) {
+        let mut listeners = self.listeners.lock().await;
         listeners.remove(&listener_id);
     }
 
     async fn notify_listeners(&self, data: Arc<T>) {
-        let listeners: Vec<Callback<T>> = {
-            let listeners_guard = self.listeners.lock().unwrap();
-            listeners_guard.values().cloned().collect()
+        let listeners: Vec<(Uuid, Callback<T>)> = {
+            let listeners_guard = self.listeners.lock().await;
+            listeners_guard
+                .iter()
+                .map(|(uuid, callback)| (*uuid, callback.clone()))
+                .collect()
         };
 
         let mut tasks = vec![];
 
         for listener in listeners {
             let data = data.clone();
-            let callback = listener.clone();
+            let (uuid, callback) = listener.clone();
 
             let task = tokio::spawn(async move {
-                callback(data).await;
+                callback(uuid, data).await;
             });
 
             tasks.push(task);
@@ -90,7 +96,7 @@ mod tests {
             }
         }
 
-        async fn handle(&self, value: Arc<i32>) {
+        async fn handle(&self, _id: Uuid, value: Arc<i32>) {
             let mut data = self.data.lock().await;
             *data = *value;
         }
@@ -101,17 +107,17 @@ mod tests {
         let publisher = Publisher::new();
         let handler = Arc::new(TestHandler::new());
 
-        let listener = Listener::new({
+        let mut listener = Listener::new({
             let handler = handler.clone();
-            move |value| {
+            move |_id: Uuid, value| {
                 let handler = handler.clone();
                 async move {
-                    handler.handle(value).await;
+                    handler.handle(_id, value).await;
                 }
             }
         });
 
-        let _listener_id = publisher.register_listener(&listener);
+        let _listener_id = publisher.register_listener(&mut listener).await;
         publisher.notify_listeners(Arc::new(42)).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -123,9 +129,9 @@ mod tests {
         let publisher = Publisher::new();
         let handler = Arc::new(TestHandler::new());
 
-        let listener = listener!(handler.handle);
+        let mut listener = listener!(handler.handle);
 
-        let _listener_id = publisher.register_listener(&listener);
+        let _listener_id = publisher.register_listener(&mut listener).await;
         publisher.notify_listeners(Arc::new(42)).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -137,18 +143,18 @@ mod tests {
         let publisher = Publisher::new();
         let handler = Arc::new(TestHandler::new());
 
-        let listener = Listener::new({
+        let mut listener = Listener::new({
             let handler = handler.clone();
-            move |value: Arc<i32>| {
+            move |_id: Uuid, value: Arc<i32>| {
                 let handler = handler.clone();
                 async move {
-                    handler.handle(value).await;
+                    handler.handle(_id, value).await;
                 }
             }
         });
 
-        let listener_id = publisher.register_listener(&listener);
-        publisher.unregister_listener(listener_id);
+        let listener_id = publisher.register_listener(&mut listener).await;
+        publisher.unregister_listener(listener_id).await;
         publisher.notify_listeners(Arc::new(100)).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;

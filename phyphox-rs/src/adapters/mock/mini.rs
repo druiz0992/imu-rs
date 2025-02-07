@@ -146,7 +146,7 @@ where
         sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         _window_size: Option<usize>,
-        publisher: Option<Arc<[Mutex<Publisher<T>>; N_SENSORS]>>,
+        publisher: Option<[Publisher<T>; N_SENSORS]>,
     ) -> Result<(), PhyphoxError> {
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
         loop {
@@ -164,9 +164,8 @@ where
                     let sensor_idx = usize::from(sensor);
                     let samples = self.get_next_samples(sensor_idx).await;
                     let buffer = T::from_vec(&self.sensor_tag, sensor.clone(), samples);
-                    if let Some(p) = &publisher {
-                        let publiser = p[sensor_idx].lock().await;
-                        publiser.notify_listeners(Arc::new(buffer)).await;
+                    if let Some(publisher) = publisher.as_ref() {
+                        publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;
                     };
                 }
             }

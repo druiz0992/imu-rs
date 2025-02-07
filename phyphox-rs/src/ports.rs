@@ -26,6 +26,6 @@ where
         sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         window_size: Option<usize>,
-        publisher: Option<Arc<[Mutex<Publisher<T>>; N_SENSORS]>>,
+        publisher: Option<[Publisher<T>; N_SENSORS]>,
     ) -> Result<(), PhyphoxError>;
 }

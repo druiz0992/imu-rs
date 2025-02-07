@@ -47,18 +47,20 @@ where
 
     // Registers a accelerometer/gyroscope/magentometer listener functions to be called whenever new samples are available.
     // Returns the id of the registered listener.
-    fn register_sensor(&self, listener: Listener<T>, sensor_type: SensorType) -> Uuid {
+    async fn register_sensor(&self, mut listener: Listener<T>, sensor_type: SensorType) -> Uuid {
         let sensor_idx = usize::from(sensor_type);
-        self.publisher[sensor_idx].register_listener(&listener)
+        self.publisher[sensor_idx]
+            .register_listener(&mut listener)
+            .await
     }
 
     // Unregisters a accelerometer/gyroscope/magnetometer listeners from the list of registered listeners.
-    fn unregister_sensor(&self, id: Uuid, sensor_type: SensorType) {
+    async fn unregister_sensor(&self, id: Uuid, sensor_type: SensorType) {
         let sensor_idx = usize::from(sensor_type);
-        self.publisher[sensor_idx].unregister_listener(id);
+        self.publisher[sensor_idx].unregister_listener(id).await;
     }
 
-    pub async fn handle(&self, measurement: Arc<T>) {
+    pub async fn handle(&self, _id: Uuid, measurement: Arc<T>) {
         let a = measurement.get_samples().get(0).cloned();
         match a {
             Some(_) => println!("SOMTHING"),
@@ -253,23 +255,35 @@ mod tests {
     use publisher::{listener, Listener, Notifiable};
 
     #[tokio::test]
-    async fn test_register_sensor() {
+    async fn test_callback() {
         let resampler = Arc::new(Resampler::<Sample3D, SensorReadings<_>>::new(
             3,
             "test".to_string(),
         ));
         let listener_resampler = resampler.clone();
         let listener = Listener::new({
-            move |value: Arc<SensorReadings<Sample3D>>| {
+            move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
                 let resampler = listener_resampler.clone();
-                async move { resampler.handle(value).await }
+                async move { resampler.handle(_id, value).await }
             }
         });
-        let listener2 = listener!(resampler.handle);
+
+        let callback = listener.get_callback();
+        let buffer = resampler.buffer[0].lock().await;
+        callback(Uuid::new_v4(), Arc::new(buffer.clone())).await;
+    }
+
+    #[tokio::test]
+    async fn test_callback_with_macro() {
+        let resampler = Arc::new(Resampler::<Sample3D, SensorReadings<_>>::new(
+            3,
+            "test".to_string(),
+        ));
+        let listener = listener!(resampler.handle);
 
         //let listener = listener!(resampler.handle);
-        let callback = listener2.get_callback();
+        let callback = listener.get_callback();
         let buffer = resampler.buffer[0].lock().await;
-        callback(Arc::new(buffer.clone())).await;
+        callback(Uuid::new_v4(), Arc::new(buffer.clone())).await;
     }
 }
