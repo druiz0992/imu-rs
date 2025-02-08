@@ -1,18 +1,17 @@
-use common::{IMUReadings, IMUSample, SensorType};
+use common::{Sample3D, SensorReadings, SensorType};
 use log::error;
 use publisher::{Listener, Publishable, Publisher};
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
+use crate::adapters::{mock::PhyphoxMock, production::Phyphox};
 /// Generic Phyphox service
 use crate::constants::N_SENSORS;
 use crate::models::errors::PhyphoxError;
 use crate::models::shutdown;
 use crate::ports::PhyphoxPort;
-use crate::{Phyphox, PhyphoxMock};
 
 const SENSOR_CLUSTER: [SensorType; N_SENSORS] = [
     SensorType::Accelerometer,
@@ -21,24 +20,18 @@ const SENSOR_CLUSTER: [SensorType; N_SENSORS] = [
 ];
 
 /// Configuration of Phyphox service
-pub struct PhyphoxService<C, T, S>
+pub struct PhyphoxService<C>
 where
-    C: PhyphoxPort<T, S>,
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample + TryFrom<Vec<f64>>,
+    C: PhyphoxPort,
 {
     client: C,
-    publisher: [Publisher<T>; N_SENSORS],
+    publisher: [Publisher<SensorReadings<Sample3D>>; N_SENSORS],
     abort_signal: Arc<Notify>,
-    _phantom_t: PhantomData<T>,
-    _phantom_s: PhantomData<S>,
 }
 
-impl<C, T, S> PhyphoxService<C, T, S>
+impl<C> PhyphoxService<C>
 where
-    C: PhyphoxPort<T, S>,
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample + TryFrom<Vec<f64>>,
+    C: PhyphoxPort,
 {
     /// Creates a new `Phyphox` instance with the specified configuration.
     /// Returns an ClientBuild error if Http client to connect to Phyphox API cannot be created
@@ -49,8 +42,6 @@ where
             client,
             abort_signal,
             publisher: std::array::from_fn(|_| Publisher::new()),
-            _phantom_t: PhantomData,
-            _phantom_s: PhantomData,
         }
     }
 
@@ -58,7 +49,7 @@ where
     // Returns the id of the registered listener.
     pub async fn register_listener(
         &self,
-        mut listener: Listener<T>,
+        mut listener: Listener<SensorReadings<Sample3D>>,
         sensor_type: SensorType,
     ) -> Uuid {
         let sensor_idx = usize::from(sensor_type);
@@ -73,6 +64,14 @@ where
         self.publisher[sensor_idx].unregister_listener(id).await;
     }
 
+    pub async fn notify_listeners(
+        &self,
+        sensor_type: SensorType,
+        data: Arc<SensorReadings<Sample3D>>,
+    ) {
+        let sensor_idx = usize::from(sensor_type);
+        self.publisher[sensor_idx].notify_listeners(data).await;
+    }
     /// Starts the data acquisition process. The process is stopped with a SIGINT signal
     /// Returns FetchData error if it can't connect to REST API.
     pub async fn start(
@@ -108,31 +107,20 @@ where
 /// * A `tokio::task::JoinHandle<()>` representing the spawned asynchronous task.
 /// * An `Arc<PhyphoxService<Phyphox>>` instance, allowing further interaction with the sensor system.
 
-pub fn run_service<T, S>(
+pub fn run_service(
     base_url: &str,
-    sensor_tag: &str,
-    period_update_millis: u64,
+    sensor_cluster_tag: &str,
+    update_period_millis: u64,
     window_size: Option<usize>,
-) -> Result<
-    (
-        tokio::task::JoinHandle<()>,
-        Arc<PhyphoxService<Phyphox<T, S>, T, S>>,
-    ),
-    PhyphoxError,
->
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample + TryFrom<Vec<f64>>,
-{
-    let phyphox = Phyphox::new(base_url, sensor_tag)?;
-    let phyphox_service: Arc<PhyphoxService<Phyphox<T, S>, _, _>> =
-        Arc::new(PhyphoxService::new(phyphox));
+) -> Result<(tokio::task::JoinHandle<()>, Arc<PhyphoxService<Phyphox>>), PhyphoxError> {
+    let phyphox = Phyphox::new(base_url, sensor_cluster_tag)?;
+    let phyphox_service: Arc<PhyphoxService<Phyphox>> = Arc::new(PhyphoxService::new(phyphox));
     let handle = tokio::spawn({
         let phyphox_service_clone = phyphox_service.clone();
         async move {
             if let Err(e) = phyphox_service_clone
                 .start(
-                    Duration::from_millis(period_update_millis),
+                    Duration::from_millis(update_period_millis),
                     window_size,
                     None, // run until ctrl-c signal
                 )
@@ -152,32 +140,31 @@ where
 /// - An `Arc<PhyphoxService<PhyphoxMock>>` instance, allowing further interaction with the sensor system.
 ///
 /// An error ClientBuild is returned if http client connecting with phyphox app REST API cannot be created.
-pub fn run_mock_service<T, S>(
-    sensor_tag: &str,
-    period_update_millis: u64,
-    capture_sampling_period_secs: f64,
+pub fn run_mock_service(
+    sensor_cluster_tag: &str,
+    update_period_millis: u64,
+    capture_sampling_period_millis: u64,
     add_sensor_noise: bool,
     run_for_millis: u64,
 ) -> Result<
     (
         tokio::task::JoinHandle<()>,
-        Arc<PhyphoxService<PhyphoxMock<T, S>, T, S>>,
+        Arc<PhyphoxService<PhyphoxMock>>,
     ),
     PhyphoxError,
->
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample + TryFrom<Vec<f64>>,
-{
-    let phyphox = PhyphoxMock::new(sensor_tag, capture_sampling_period_secs, add_sensor_noise)?;
-    let phyphox_service: Arc<PhyphoxService<PhyphoxMock<T, S>, _, _>> =
-        Arc::new(PhyphoxService::new(phyphox));
+> {
+    let phyphox = PhyphoxMock::new(
+        sensor_cluster_tag,
+        capture_sampling_period_millis,
+        add_sensor_noise,
+    )?;
+    let phyphox_service: Arc<PhyphoxService<PhyphoxMock>> = Arc::new(PhyphoxService::new(phyphox));
     let handle = tokio::spawn({
         let phyphox_service_clone = phyphox_service.clone();
         async move {
             if let Err(e) = phyphox_service_clone
                 .start(
-                    Duration::from_millis(period_update_millis),
+                    Duration::from_millis(update_period_millis),
                     None,
                     Some(run_for_millis),
                 )
@@ -194,20 +181,18 @@ where
 mod tests {
     use super::*;
     use crate::adapters::mock::PhyphoxMock;
-    use crate::Phyphox;
-    use common::{Sample3D, SensorReadings};
+    use crate::adapters::production::Phyphox;
 
     #[tokio::test]
     async fn test_phyphox_client_new() {
-        let client = Phyphox::<SensorReadings<Sample3D>, _>::new("http://localhost", "Test")
-            .expect("Error creating Phyphox instance");
+        let client =
+            Phyphox::new("http://localhost", "Test").expect("Error creating Phyphox instance");
         PhyphoxService::new(client);
     }
 
     #[tokio::test]
     async fn test_phyphox_mini_client_new() {
-        let client = PhyphoxMock::<SensorReadings<Sample3D>, _>::new("Test", 0.01, false)
-            .expect("Error creating Phyphox instance");
+        let client = PhyphoxMock::new("Test", 10, false).expect("Error creating Phyphox instance");
         let client_service = Arc::new(PhyphoxService::new(client));
 
         let client_service_clone = Arc::clone(&client_service);
@@ -219,5 +204,24 @@ mod tests {
         });
 
         start_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_run_mock_service() {
+        let sensor_tag = "Test";
+        let update_period_millis = 100;
+        let capture_sampling_period_millis = 5;
+        let add_sensor_noise = false;
+        let run_for_millis = 1000;
+        let (handle, _service) = run_mock_service(
+            sensor_tag,
+            update_period_millis,
+            capture_sampling_period_millis,
+            add_sensor_noise,
+            run_for_millis,
+        )
+        .unwrap();
+
+        handle.await.unwrap();
     }
 }

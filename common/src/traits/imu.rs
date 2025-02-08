@@ -67,3 +67,16 @@ pub trait IMUFilter<T: IMUUntimedSample>: Send + Sync {
     /// Returns the filtered samples
     fn filter(&mut self, samples: Vec<T>) -> Vec<T>;
 }
+
+/*
+pub trait IMUSource {
+    fn get_tag(&self) -> &str;
+    fn get_available_sensors(&self, sensor_type: SensorType) -> bool;
+    async fn register_listener(
+        &self,
+        mut listener: Listener<T>,
+        sensor_type: SensorType,
+    ) -> Uuid;
+    fn unregister_listener(&self)
+}
+    */

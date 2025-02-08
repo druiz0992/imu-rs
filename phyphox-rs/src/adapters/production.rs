@@ -4,7 +4,6 @@
 // via an HTTP API. It includes methods to fetch sensor data,
 // control common, and register listeners to receive for incoming data.
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,7 +11,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tokio::sync::Notify;
 
-use common::{IMUFilter, IMUReadings, IMUSample, SensorType, XYZ};
+use common::{IMUFilter, IMUReadings, IMUSample, Sample3D, SensorReadings, SensorType, XYZ};
 use publisher::{Publishable, Publisher};
 
 use crate::constants::N_SENSORS;
@@ -31,32 +30,20 @@ const CLEAR_CMD: &str = "clear";
 const CONFIG_CMD: &str = "/config?";
 
 /// Configures data acquisition
-pub struct Phyphox<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample,
-{
+pub struct Phyphox {
     client: HttpClient,
-    sensor_tag: String,
-    _phamtom_data_s: PhantomData<S>,
-    _phamtom_data_t: PhantomData<T>,
+    sensor_cluster_tag: String,
 }
 
-impl<T, S> Phyphox<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample,
-{
+impl Phyphox {
     /// Creates a new `Phyphox` instance with the specified configuration.
     /// Returns an ClientBuild error if Http client to connect to Phyphox API cannot be created
-    pub fn new(base_url: &str, sensor_tag: &str) -> Result<Self, PhyphoxError> {
+    pub(crate) fn new(base_url: &str, sensor_cluster_tag: &str) -> Result<Self, PhyphoxError> {
         let client = HttpClient::new(base_url.to_string())?;
 
         Ok(Self {
             client,
-            sensor_tag: sensor_tag.to_string(),
-            _phamtom_data_s: PhantomData,
-            _phamtom_data_t: PhantomData,
+            sensor_cluster_tag: sensor_cluster_tag.to_string(),
         })
     }
 
@@ -128,11 +115,7 @@ where
 }
 
 #[async_trait]
-impl<T, S> PhyphoxPort<T, S> for Phyphox<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample,
-{
+impl PhyphoxPort for Phyphox {
     /// Starts the data acquisition process. The process is stopped with a SIGINT signal
     /// Returns FetchData error if it can't connect to REST API.
     async fn start(
@@ -141,7 +124,7 @@ where
         sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         window_size: Option<usize>,
-        publisher: Option<[Publisher<T>; N_SENSORS]>,
+        publisher: Option<[Publisher<SensorReadings<Sample3D>>; N_SENSORS]>,
     ) -> Result<(), PhyphoxError> {
         self.clear_cmd().await?;
         self.start_cmd().await?;
@@ -197,9 +180,9 @@ where
                         let filtered_data = timestamp_info
                             .into_iter()
                             .zip(filtered_untimed_data.into_iter())
-                            .map(|(t, s)| S::from_untimed(s.inner().to_vec(), t))
+                            .map(|(t, s)| Sample3D::from_untimed(s.inner().to_vec(), t))
                             .collect();
-                        let buffer  = T::from_vec(&self.sensor_tag, sensor.clone(), filtered_data);
+                        let buffer  = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), filtered_data);
 
                         if let Some(publisher) = publisher.as_ref() {
                             publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await
@@ -218,14 +201,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{Sample3D, SensorReadings};
     use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
     async fn test_phyphox_new() {
-        Phyphox::<SensorReadings<Sample3D>, _>::new("http://localhost", "Test")
-            .expect("Error creating Phyphox instance");
+        Phyphox::new("http://localhost", "Test").expect("Error creating Phyphox instance");
     }
 
     #[tokio::test]
@@ -239,9 +220,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let phyphox =
-            Phyphox::<SensorReadings<Sample3D>, _>::new(mock_server.uri().as_str(), "Test")
-                .unwrap();
+        let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test").unwrap();
 
         let result = phyphox.fetch_json("/get?test").await.unwrap();
         assert_eq!(result["key"], "value");
@@ -261,9 +240,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let phyphox =
-            Phyphox::<SensorReadings<Sample3D>, _>::new(mock_server.uri().as_str(), "Test")
-                .unwrap();
+        let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test").unwrap();
 
         let result = phyphox.clear_cmd().await;
         assert!(result.is_ok());
@@ -288,9 +265,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let phyphox =
-            Phyphox::<SensorReadings<Sample3D>, _>::new(mock_server.uri().as_str(), "Test")
-                .unwrap();
+        let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test").unwrap();
 
         let (_timestamps, data, is_measuring) = phyphox
             .get_data("acc_time", Some(0.0), &["accX", "accY", "accZ"])
@@ -326,9 +301,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let phyphox =
-            Phyphox::<SensorReadings<Sample3D>, _>::new(mock_server.uri().as_str(), "Test")
-                .unwrap();
+        let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test").unwrap();
 
         let (_timestamps, data, is_measuring) = phyphox
             .get_data("acc_time", Some(0.0), &["accX", "accY", "accZ"])
@@ -337,9 +310,5 @@ mod tests {
 
         assert_eq!(data, vec![XYZ::from_vec(vec![1.0, 3.0, 5.0]).unwrap(),]);
         assert!(is_measuring);
-    }
-
-    struct MockPhyphox {
-        // Add any necessary fields for the mock
     }
 }

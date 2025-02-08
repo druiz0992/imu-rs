@@ -1,4 +1,5 @@
 pub mod resampler;
+mod resampler_test_code;
 
 mod utils;
 
@@ -12,7 +13,7 @@ use resampler::{ResamplePolicy, Resampler};
 /// Runs the main application logic asynchronously, managing sensors and data processing.
 /// Returns a `tokio::task::JoinHandle` representing the asynchronous task running the main logic.
 pub fn run<S, T>(
-    sensor_tag: String,
+    sensor_tag: &str,
     n_buffer: usize,
     resampling_period_millis: u64,
     resampling_policy: Option<ResamplePolicy>,

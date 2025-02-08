@@ -1,6 +1,6 @@
 use async_trait::async_trait;
+use common::{Sample3D, SensorReadings};
 use rand::{rngs::StdRng, SeedableRng};
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -23,51 +23,42 @@ const LSB_TIME_MASK: u8 = 0xC0;
 const MAX_N_SAMPLES: u8 = 15;
 
 /// Configures mock data acquisition
-pub struct PhyphoxMock<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample + TryFrom<Vec<f64>>,
-{
-    readings: Mutex<[CircularReader<S>; N_SENSORS]>,
+pub struct PhyphoxMock {
+    readings: Mutex<[CircularReader<Sample3D>; N_SENSORS]>,
     timestamps: Mutex<Timestamp>,
     capture_sampling_period_secs: f64,
     time_delta: GaussianNoise,
     sensor_noise: Option<GaussianNoise>,
-    sensor_tag: String,
-    _phantom_data: PhantomData<T>,
+    sensor_cluster_tag: String,
 }
 
-impl<T, S> PhyphoxMock<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample + TryFrom<Vec<f64>>,
-{
+impl PhyphoxMock {
     /// Creates a new `Phyphox` instance with the specified configuration.
     /// Returns an ClientBuild error if Http client to connect to Phyphox API cannot be created
-    pub fn new(
-        sensor_tag: &str,
-        capture_sampling_period_secs: f64,
+    pub(crate) fn new(
+        sensor_cluster_tag: &str,
+        capture_sampling_period_millis: u64,
         add_sensor_noise: bool,
     ) -> Result<Self, PhyphoxError> {
         let test_data = "../test-utils/test_data/sensor_readings.csv";
         let mut gyro_mapper = CsvColumnMapper::new();
         gyro_mapper.add_timestamp().add_gyro();
         let gyro_readings = CircularReader::try_from(
-            csv_loader::load_csv_columns::<S>(test_data, &gyro_mapper.columns()).unwrap(),
+            csv_loader::load_csv_columns::<Sample3D>(test_data, &gyro_mapper.columns()).unwrap(),
         )
         .map_err(PhyphoxError::Other)?;
 
         let mut accel_mapper = CsvColumnMapper::new();
         accel_mapper.add_timestamp().add_accel();
         let accel_readings = CircularReader::try_from(
-            csv_loader::load_csv_columns::<S>(test_data, &accel_mapper.columns()).unwrap(),
+            csv_loader::load_csv_columns::<Sample3D>(test_data, &accel_mapper.columns()).unwrap(),
         )
         .map_err(PhyphoxError::Other)?;
 
         let mut mag_mapper = CsvColumnMapper::new();
         mag_mapper.add_timestamp().add_accel();
         let mag_readings = CircularReader::try_from(
-            csv_loader::load_csv_columns::<S>(test_data, &mag_mapper.columns()).unwrap(),
+            csv_loader::load_csv_columns::<Sample3D>(test_data, &mag_mapper.columns()).unwrap(),
         )
         .map_err(PhyphoxError::Other)?;
 
@@ -77,18 +68,17 @@ where
             mag_readings.clone(),
         ]);
         Ok(Self {
-            sensor_tag: sensor_tag.to_string(),
+            sensor_cluster_tag: sensor_cluster_tag.to_string(),
             readings,
             timestamps: Mutex::new(Timestamp::new()),
-            capture_sampling_period_secs,
+            capture_sampling_period_secs: capture_sampling_period_millis as f64 / 1000.0,
             time_delta: GaussianNoise::new(GAUSSIAN_TIME_MEAN, GAUSSIAN_TIME_STDEV),
             sensor_noise: add_sensor_noise
                 .then(|| GaussianNoise::new(GAUSSIAN_SENSOR_MEAN, GAUSSIAN_SENSOR_STDEV)),
-            _phantom_data: PhantomData,
         })
     }
 
-    async fn get_next_samples(&self, buffer_idx: usize) -> Vec<S> {
+    async fn get_next_samples(&self, buffer_idx: usize) -> Vec<Sample3D> {
         let mut new_samples = Vec::new();
         let pending_samples = select_random_pending_samples();
         let mut rng = StdRng::from_entropy();
@@ -109,7 +99,7 @@ where
                         let rgen = self.sensor_noise.as_ref().unwrap();
                         next_measurement = rgen.add_noise_vec(&mut rng, next_measurement);
                     }
-                    new_samples.push(S::from_untimed(next_measurement, sample_timestamp))
+                    new_samples.push(Sample3D::from_untimed(next_measurement, sample_timestamp))
                 } else {
                     break;
                 }
@@ -133,11 +123,7 @@ fn select_random_pending_samples() -> usize {
 }
 
 #[async_trait]
-impl<T, S> PhyphoxPort<T, S> for PhyphoxMock<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample + TryFrom<Vec<f64>>,
-{
+impl PhyphoxPort for PhyphoxMock {
     /// Starts the data acquisition process. The process is stopped with a SIGINT signal
     /// Returns FetchData error if it can't connect to REST API.
     async fn start(
@@ -146,7 +132,7 @@ where
         sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         _window_size: Option<usize>,
-        publisher: Option<[Publisher<T>; N_SENSORS]>,
+        publisher: Option<[Publisher<SensorReadings<Sample3D>>; N_SENSORS]>,
     ) -> Result<(), PhyphoxError> {
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
         loop {
@@ -163,7 +149,7 @@ where
                 for sensor in sensor_cluster {
                     let sensor_idx = usize::from(sensor);
                     let samples = self.get_next_samples(sensor_idx).await;
-                    let buffer = T::from_vec(&self.sensor_tag, sensor.clone(), samples);
+                    let buffer = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), samples);
                     if let Some(publisher) = publisher.as_ref() {
                         publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;
                     };
@@ -179,11 +165,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{Sample3D, SensorReadings};
 
     #[tokio::test]
     async fn test_phyphox_mock_new() {
-        let phyphox_mock = PhyphoxMock::<SensorReadings<Sample3D>, _>::new("Test", 0.1, false);
+        let phyphox_mock = PhyphoxMock::new("Test", 100, false);
         assert!(phyphox_mock.is_ok());
     }
 
@@ -194,8 +179,7 @@ mod tests {
             SensorType::Gyroscope,
             SensorType::Magnetometer,
         ];
-        let phyphox_mock =
-            Arc::new(PhyphoxMock::<SensorReadings<Sample3D>, _>::new("Test", 0.1, false).unwrap());
+        let phyphox_mock = Arc::new(PhyphoxMock::new("Test", 100, false).unwrap());
         let period = Duration::from_millis(100);
 
         let phyphox_mock_clone = Arc::clone(&phyphox_mock);
@@ -234,8 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_next_samples() {
-        let phyphox_mock =
-            PhyphoxMock::<SensorReadings<Sample3D>, _>::new("Test", 0.1, true).unwrap();
+        let phyphox_mock = PhyphoxMock::new("Test", 100, true).unwrap();
         {
             let mut timestamp = phyphox_mock.timestamps.lock().await;
             timestamp.incr_current_timestamp(0.1);

@@ -5,18 +5,14 @@ use tokio::sync::Notify;
 use async_trait::async_trait;
 
 use common::types::SensorType;
-use common::{IMUReadings, IMUSample};
+use common::{Sample3D, SensorReadings};
 use publisher::Publisher;
 
 use crate::constants::N_SENSORS;
 use crate::models::errors::PhyphoxError;
 
 #[async_trait]
-pub trait PhyphoxPort<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample,
-{
+pub trait PhyphoxPort {
     /// Starts the data acquisition process. The process is stopped with a SIGINT signal
     /// Returns FetchData error if it can't connect to REST API.
     async fn start(
@@ -25,6 +21,6 @@ where
         sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         window_size: Option<usize>,
-        publisher: Option<[Publisher<T>; N_SENSORS]>,
+        publisher: Option<[Publisher<SensorReadings<Sample3D>>; N_SENSORS]>,
     ) -> Result<(), PhyphoxError>;
 }

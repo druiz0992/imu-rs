@@ -9,18 +9,18 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_receive_accelerometer_samples() {
     let sensor_tag = "Test";
-    let period_update_millis = 200;
-    let capture_sampling_period_secs = 0.1;
+    let update_period_millis = 200;
+    let capture_sampling_period_millis = 100;
     let add_sensor_noise = false;
     let run_for_millis = 5000;
     let received_samples: Arc<Mutex<Vec<Sample3D>>> = Arc::new(Mutex::new(Vec::new()));
     let received_id = Arc::new(Mutex::new(Uuid::new_v4()));
 
     // Start phyphox mock service
-    let (handle, phyphox) = services::run_mock_service::<SensorReadings<Sample3D>, _>(
+    let (handle, phyphox) = services::run_mock_service(
         sensor_tag,
-        period_update_millis,
-        capture_sampling_period_secs,
+        update_period_millis,
+        capture_sampling_period_millis,
         add_sensor_noise,
         run_for_millis,
     )
@@ -62,18 +62,18 @@ async fn test_receive_accelerometer_samples() {
 #[tokio::test]
 async fn test_receive_multiple_sensors() {
     let sensor_tag = "Test";
-    let period_update_millis = 200;
-    let capture_sampling_period_secs = 0.1;
+    let update_period_millis = 200;
+    let capture_sampling_period_millis = 100;
     let add_sensor_noise = false;
     let run_for_millis = 5000;
     let received_samples: Arc<Mutex<HashMap<Uuid, Vec<Sample3D>>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
     // Start phyphox mock service
-    let (handle, phyphox) = services::run_mock_service::<SensorReadings<Sample3D>, _>(
+    let (handle, phyphox) = services::run_mock_service(
         sensor_tag,
-        period_update_millis,
-        capture_sampling_period_secs,
+        update_period_millis,
+        capture_sampling_period_millis,
         add_sensor_noise,
         run_for_millis,
     )
@@ -117,17 +117,17 @@ async fn test_receive_multiple_sensors() {
 #[tokio::test]
 async fn test_stop_receiving_accelerometer_samples() {
     let sensor_tag = "Test";
-    let period_update_millis = 200;
-    let capture_sampling_period_secs = 0.1;
+    let update_period_millis = 200;
+    let capture_sampling_period_millis = 100;
     let add_sensor_noise = false;
     let run_for_millis = 5000;
     let received_samples: Arc<Mutex<Vec<Sample3D>>> = Arc::new(Mutex::new(Vec::new()));
 
     // Start phyphox mock service
-    let (handle, phyphox) = services::run_mock_service::<SensorReadings<Sample3D>, _>(
+    let (handle, phyphox) = services::run_mock_service(
         sensor_tag,
-        period_update_millis,
-        capture_sampling_period_secs,
+        update_period_millis,
+        capture_sampling_period_millis,
         add_sensor_noise,
         run_for_millis,
     )
