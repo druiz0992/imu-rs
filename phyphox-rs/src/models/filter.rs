@@ -1,5 +1,5 @@
 use common::buffers::CircularBuffer;
-use common::{IMUFilter, IMUUntimedSample};
+use common::IMUUntimedSample;
 
 const DEFAULT_CAPACITY: usize = 64;
 
@@ -20,11 +20,8 @@ impl<T: IMUUntimedSample> MovingAverage<T> {
             aggregate: T::default(),
         }
     }
-}
-
-impl<T: IMUUntimedSample> IMUFilter<T> for MovingAverage<T> {
     /// Returns smoothed samples
-    fn filter(&mut self, samples: Vec<T>) -> Vec<T> {
+    pub(crate) fn filter(&mut self, samples: Vec<T>) -> Vec<T> {
         let mut filtered_data = Vec::with_capacity(DEFAULT_CAPACITY);
         for sample in samples {
             let out = self.buffer.push(sample.clone());

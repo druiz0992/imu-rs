@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tokio::sync::Notify;
 
-use common::{IMUFilter, IMUReadings, IMUSample, Sample3D, SensorReadings, SensorType, XYZ};
+use common::{IMUReadings, IMUSample, Sample3D, SensorReadings, SensorType, XYZ};
 use publisher::{Publishable, Publisher};
 
 use crate::constants::N_SENSORS;
