@@ -6,8 +6,9 @@ mod utils;
 use log::error;
 use std::sync::Arc;
 
+use common::traits::imu::{IMUFilter, IMUUntimedSample};
+use common::types::filters::{MovingAverage, WeightedMovingAverage};
 use common::{IMUReadings, IMUSample};
-use publisher::Notifiable;
 use resampler::{ResamplePolicy, Resampler};
 
 /// Runs the main application logic asynchronously, managing sensors and data processing.
@@ -20,7 +21,10 @@ pub fn run<S, T>(
 ) -> (tokio::task::JoinHandle<()>, Arc<Resampler<S, T>>)
 where
     S: IMUSample,
-    T: Send + Sync + IMUReadings<S> + Default + 'static,
+    T: Send + Sync + IMUReadings<S> + 'static,
+    S::Untimed: IMUUntimedSample,
+    MovingAverage<S::Untimed>: IMUFilter<S>,
+    WeightedMovingAverage<S::Untimed>: IMUFilter<S>,
 {
     let resampler = Arc::new(Resampler::new(n_buffer, sensor_tag));
     let resampler_clone = Arc::clone(&resampler);

@@ -11,13 +11,16 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tokio::sync::Notify;
 
-use common::{IMUReadings, IMUSample, Sample3D, SensorReadings, SensorType, XYZ};
+use common::types::filters::moving_average::MovingAverage;
+use common::types::sensors::{SensorReadings, SensorType};
+use common::types::timed::Sample3D;
+use common::types::untimed::XYZ;
+use common::{IMUFilter, IMUReadings, IMUSample};
 use publisher::{Publishable, Publisher};
 
 use crate::constants::N_SENSORS;
 use crate::helpers;
 use crate::models::errors::PhyphoxError;
-use crate::models::filter;
 use crate::models::http_client::HttpClient;
 use crate::ports::PhyphoxPort;
 
@@ -133,9 +136,9 @@ impl PhyphoxPort for Phyphox {
 
         log::info!("Fetching data...");
 
-        let mut ma_filters: Vec<Option<filter::MovingAverage<XYZ>>> = window_size
+        let mut ma_filters: Vec<Option<MovingAverage<XYZ>>> = window_size
             .map_or(vec![None; N_SENSORS], |w_size| {
-                vec![Some(filter::MovingAverage::new(w_size)); N_SENSORS]
+                vec![Some(MovingAverage::new(w_size)); N_SENSORS]
             });
 
         let active_sensor = self.get_available_sensors().await?;
@@ -172,21 +175,19 @@ impl PhyphoxPort for Phyphox {
 
                         helpers::update_measurement_time(&timestamp_info, &mut last_time[sensor_idx]);
 
-                        let filtered_untimed_data = match ma_filters[sensor_idx].as_mut() {
-                            Some(ma_filter) => ma_filter.filter(untimed_data_info),
-                            None => untimed_data_info, // No need to clone here
+                        let timed_samples: Vec<Sample3D> = timestamp_info.into_iter().zip(untimed_data_info.into_iter()).map(|(t, s)| Sample3D::from_measurement(t, s)).collect();
+                        let filtered_data = match ma_filters[sensor_idx].as_mut() {
+                            Some(ma_filter) => ma_filter.filter_batch(timed_samples),
+                            None => Ok(timed_samples)
                         };
 
-                        let filtered_data = timestamp_info
-                            .into_iter()
-                            .zip(filtered_untimed_data.into_iter())
-                            .map(|(t, s)| Sample3D::from_untimed(s.inner().to_vec(), t))
-                            .collect();
-                        let buffer  = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), filtered_data);
+                        if let Ok(filtered_data) = filtered_data {
+                            let buffer  = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), filtered_data);
 
-                        if let Some(publisher) = publisher.as_ref() {
-                            publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await
-                        };
+                            if let Some(publisher) = publisher.as_ref() {
+                                publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await
+                            };
+                        }
 
                     }
                 }
@@ -275,8 +276,8 @@ mod tests {
         assert_eq!(
             data,
             vec![
-                XYZ::from_vec(vec![1.0, 3.0, 5.0]).unwrap(),
-                XYZ::from_vec(vec![2.0, 4.0, 6.0]).unwrap()
+                XYZ::try_from(vec![1.0, 3.0, 5.0]).unwrap(),
+                XYZ::try_from(vec![2.0, 4.0, 6.0]).unwrap()
             ]
         );
         assert!(is_measuring);
@@ -308,7 +309,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(data, vec![XYZ::from_vec(vec![1.0, 3.0, 5.0]).unwrap(),]);
+        assert_eq!(data, vec![XYZ::try_from(vec![1.0, 3.0, 5.0]).unwrap(),]);
         assert!(is_measuring);
     }
 }

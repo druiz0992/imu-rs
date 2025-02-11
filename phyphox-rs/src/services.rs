@@ -1,4 +1,3 @@
-use common::{Sample3D, SensorReadings, SensorType};
 use log::error;
 use publisher::{Listener, Publishable, Publisher};
 use std::sync::Arc;
@@ -12,6 +11,8 @@ use crate::constants::N_SENSORS;
 use crate::models::errors::PhyphoxError;
 use crate::models::shutdown;
 use crate::ports::PhyphoxPort;
+use common::types::sensors::{SensorReadings, SensorType};
+use common::types::timed::Sample3D;
 
 const SENSOR_CLUSTER: [SensorType; N_SENSORS] = [
     SensorType::Accelerometer,

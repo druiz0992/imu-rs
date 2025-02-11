@@ -1,4 +1,3 @@
-use common::{IMUReadings, IMUSample, Sample3D, SensorReadings, SensorType};
 use phyphox_rs::services;
 use publisher::Listener;
 use std::collections::HashMap;
@@ -6,6 +5,9 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use common::types::sensors::{SensorReadings, SensorType};
+use common::types::timed::Sample3D;
+use common::{IMUReadings, IMUSample};
 #[tokio::test]
 async fn test_receive_accelerometer_samples() {
     let sensor_tag = "Test";
@@ -39,7 +41,7 @@ async fn test_receive_accelerometer_samples() {
                 *received_id_lock = id;
                 let tag = value.get_sensor_tag();
                 assert_eq!(tag, "Test");
-                buffer_lock.extend(value.into_iter_samples());
+                buffer_lock.extend(value.get_samples().into_iter());
             }
         })
     };
@@ -91,7 +93,7 @@ async fn test_receive_multiple_sensors() {
                 storage_lock
                     .entry(id)
                     .or_insert_with(Vec::new)
-                    .extend(value.into_iter_samples());
+                    .extend(value.get_samples().into_iter());
             }
         })
     };
@@ -142,7 +144,7 @@ async fn test_stop_receiving_accelerometer_samples() {
                 let mut buffer_lock = buffer.lock().await;
                 let tag = value.get_sensor_tag();
                 assert_eq!(tag, "Test");
-                buffer_lock.extend(value.into_iter_samples());
+                buffer_lock.extend(value.get_samples().into_iter());
             }
         })
     };

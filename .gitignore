@@ -1,10 +1,11 @@
-#Cargo.lock
+Cargo.lock
 
 target/
 
 **/target/
-#**/Cargo.lock
+**/Cargo.lock
 
 .vscode/
 .idea/
 *.swp
+*.profraw

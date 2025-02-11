@@ -1,10 +1,13 @@
+use common::types::filters::moving_average::MovingAverage;
+use common::types::filters::weighted_moving_average::WeightedMovingAverage;
 use std::sync::Arc;
 use std::{error::Error, marker::PhantomData};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use common::{IMUReadings, IMUSample, SensorType};
+use common::types::sensors::SensorType;
+use common::{IMUFilter, IMUReadings, IMUSample, IMUUntimedSample};
 use publisher::{Listener, Publishable, Publisher};
 
 use crate::utils;
@@ -24,6 +27,9 @@ pub struct Resampler<S, T>
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
+    S::Untimed: IMUUntimedSample,
+    MovingAverage<S::Untimed>: IMUFilter<S>,
+    WeightedMovingAverage<S::Untimed>: IMUFilter<S>,
 {
     buffer: Vec<Mutex<T>>,
     publisher: Vec<Publisher<T>>,
@@ -34,6 +40,9 @@ impl<S, T> Resampler<S, T>
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
+    S::Untimed: IMUUntimedSample,
+    MovingAverage<S::Untimed>: IMUFilter<S>,
+    WeightedMovingAverage<S::Untimed>: IMUFilter<S>,
 {
     pub fn new(n_buffer: usize, tag: &str) -> Self {
         Self {
@@ -119,9 +128,7 @@ where
             if n_samples > 1 {
                 // apply redundant sample policy
                 cache[idx] = match resample_policy {
-                    ResamplePolicy::Averaging => {
-                        utils::compute_average(imu_samples.get_samples(), timestamp)?
-                    }
+                    ResamplePolicy::Averaging => utils::compute_average(imu_samples.get_samples())?,
                     ResamplePolicy::FirstSample => {
                         imu_samples.get_samples().get(0).cloned().unwrap()
                     }
@@ -195,14 +202,15 @@ where
 
         for sensor_buffer in buffer_clone.iter_mut() {
             let filtered_samples: Vec<S> = sensor_buffer
-                .into_iter_samples()
+                .get_samples()
+                .into_iter()
                 .filter_map(|sample| {
                     let sample_timestamp = sample.get_timestamp();
                     let sample_data = sample.get_measurement();
                     if sample_timestamp <= timestamp
                         && sample_timestamp >= timestamp - period * 10.0
                     {
-                        Some(S::from_untimed(sample_data, sample_timestamp))
+                        Some(S::from_measurement(sample_timestamp, sample_data))
                     } else {
                         None
                     }
@@ -283,7 +291,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{Sample3D, SensorReadings};
+    use common::types::sensors::SensorReadings;
+    use common::types::timed::Sample3D;
     use publisher::{listener, Listener, Notifiable};
 
     #[tokio::test]

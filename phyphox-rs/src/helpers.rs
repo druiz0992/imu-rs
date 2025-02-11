@@ -1,7 +1,6 @@
-use common::IMUUntimedSample;
 use serde_json::Value;
 
-use common::constants::N_XYZ_COORDINATES;
+use common::types::untimed::xyz::N_XYZ_COORDINATES;
 use common::types::XYZ;
 
 use crate::models::errors::PhyphoxError;
@@ -102,7 +101,7 @@ pub(crate) fn combine_results(results: Vec<Vec<f64>>) -> (Vec<f64>, Vec<XYZ>) {
             .cloned()
             .collect();
 
-        if let Some(xyz) = XYZ::from_timed(values) {
+        if let Ok(xyz) = XYZ::try_from(values) {
             untimed_data.push(xyz);
             timestamp.push(results[0][row].clone());
         }

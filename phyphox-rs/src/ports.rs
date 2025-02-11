@@ -4,8 +4,8 @@ use tokio::sync::Notify;
 
 use async_trait::async_trait;
 
-use common::types::SensorType;
-use common::{Sample3D, SensorReadings};
+use common::types::timed::Sample3D;
+use common::types::{SensorReadings, SensorType};
 use publisher::Publisher;
 
 use crate::constants::N_SENSORS;

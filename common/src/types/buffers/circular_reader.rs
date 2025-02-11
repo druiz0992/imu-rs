@@ -1,3 +1,26 @@
+/// A circular buffer reader that allows cyclic reading of elements.
+///
+/// # Type Parameters
+///
+/// * `T` - The type of elements stored in the buffer. It must implement the `Clone` trait.
+///
+/// # Fields
+///
+/// * `buffer` - A vector containing the elements of the buffer.
+/// * `index` - The current index in the buffer.
+///
+/// # Examples
+///
+/// ```
+/// use common::types::buffers::circular_reader::CircularReader;
+///
+/// let data = vec![10, 20, 30, 40];
+/// let mut reader = CircularReader::new(data.clone()).unwrap();
+///
+/// for i in 0..6 {
+///     assert_eq!(reader.next_element(), data[i % data.len()]);
+/// }
+/// ```
 #[derive(Clone, Debug)]
 pub struct CircularReader<T: Clone> {
     buffer: Vec<T>,
@@ -21,16 +44,6 @@ impl<T: Clone> CircularReader<T> {
         let elem = &self.buffer[self.index];
         self.index = (self.index + 1) % self.buffer.len();
         elem.clone()
-    }
-
-    /// Peeks at the current element without advancing the index.
-    pub fn peek(&self) -> &T {
-        &self.buffer[self.index]
-    }
-
-    /// Resets the reader back to the start.
-    pub fn reset(&mut self) {
-        self.index = 0;
     }
 }
 

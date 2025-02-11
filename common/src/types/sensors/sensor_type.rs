@@ -10,7 +10,7 @@
 /// # Examples
 ///
 /// ```
-/// use common::SensorType;
+/// use common::types::sensors::SensorType;
 ///
 /// let sensor = SensorType::Accelerometer;
 /// assert_eq!(usize::from(sensor), 0);

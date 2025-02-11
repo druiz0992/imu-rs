@@ -68,7 +68,6 @@ impl<T: IMUSample> IMUReadings<T> for SensorReadings<T> {
 mod tests {
     use super::*;
     use crate::types::Sample3D;
-    use crate::IMUSample;
 
     #[test]
     fn test_sensor_tag_new() {
@@ -96,33 +95,5 @@ mod tests {
         sensor.add_sample(sample.clone());
         assert_eq!(sensor.len(), 1);
         assert_eq!(sensor.get_samples_ref()[0], sample);
-    }
-
-    #[test]
-    fn test_iter_samples() {
-        let mut sensor = SensorReadings::<Sample3D>::new("IMU1", SensorType::Magnetometer);
-        sensor.add_sample(Sample3D::new(1.0, [1.0, 2.0, 3.0]));
-        sensor.add_sample(Sample3D::new(2.0, [4.0, 5.0, 6.0]));
-        sensor.add_sample(Sample3D::new(3.0, [7.0, 8.0, 8.0]));
-
-        let timestamps: Vec<f64> = sensor.iter_samples().map(|s| s.get_timestamp()).collect();
-
-        assert_eq!(timestamps, vec![1.0, 2.0, 3.0]);
-        assert_eq!(sensor.len(), 3);
-    }
-
-    #[test]
-    fn test_into_iter_samples() {
-        let mut sensor = SensorReadings::new("IMU1", SensorType::Accelerometer);
-        sensor.add_sample(Sample3D::new(1.0, [1.0, 2.0, 3.0]));
-        sensor.add_sample(Sample3D::new(2.0, [4.0, 5.0, 6.0]));
-        sensor.add_sample(Sample3D::new(3.0, [7.0, 8.0, 8.0]));
-
-        let timestamps: Vec<f64> = sensor
-            .into_iter_samples()
-            .map(|s| s.get_timestamp())
-            .collect();
-
-        assert_eq!(timestamps, vec![1.0, 2.0, 3.0]);
     }
 }

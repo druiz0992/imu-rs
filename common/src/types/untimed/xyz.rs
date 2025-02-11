@@ -2,8 +2,10 @@ use nalgebra::Vector3;
 
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 
-use crate::constants::N_XYZ_COORDINATES;
-use crate::{IMUSample, IMUUntimedSample};
+use crate::traits::imu::BasicArithmetic;
+use crate::IMUUntimedSample;
+
+pub const N_XYZ_COORDINATES: usize = 3;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Default)]
 pub struct XYZ(Vector3<f64>);
@@ -13,11 +15,8 @@ impl XYZ {
         Self(Vector3::from_vec(data.to_vec()))
     }
 
-    pub fn from_vec(data: Vec<f64>) -> Option<Self> {
-        if data.len() != N_XYZ_COORDINATES {
-            return None;
-        }
-        Some(Self(Vector3::from_vec(data.to_vec())))
+    pub fn from_vector(data: Vector3<f64>) -> Self {
+        Self(data)
     }
 
     pub fn inner(&self) -> [f64; N_XYZ_COORDINATES] {
@@ -26,12 +25,37 @@ impl XYZ {
 }
 
 impl IMUUntimedSample for XYZ {
-    fn get_measurement(&self) -> Vec<f64> {
-        vec![self.0.x, self.0.y, self.0.z]
+    fn get_measurement(&self) -> Self {
+        self.clone()
     }
+}
 
-    fn from_timed(timed_samples: Vec<f64>) -> Option<Self> {
-        XYZ::from_vec(timed_samples)
+impl From<XYZ> for [f64; N_XYZ_COORDINATES] {
+    fn from(value: XYZ) -> Self {
+        value.inner()
+    }
+}
+
+impl From<[f64; N_XYZ_COORDINATES]> for XYZ {
+    fn from(value: [f64; N_XYZ_COORDINATES]) -> Self {
+        Self(Vector3::from(value))
+    }
+}
+
+impl From<XYZ> for Vec<f64> {
+    fn from(value: XYZ) -> Self {
+        value.inner().to_vec()
+    }
+}
+
+impl TryFrom<Vec<f64>> for XYZ {
+    type Error = &'static str;
+
+    fn try_from(value: Vec<f64>) -> Result<Self, Self::Error> {
+        if value.len() != N_XYZ_COORDINATES {
+            return Err("Can't convert to XYZ");
+        }
+        Ok(Self(Vector3::from_vec(value)))
     }
 }
 impl Add for XYZ {
@@ -78,11 +102,7 @@ impl Mul<f64> for XYZ {
     }
 }
 
-impl<T: IMUSample> From<T> for XYZ {
-    fn from(value: T) -> Self {
-        Self::from_timed(value.get_measurement()).unwrap_or_default()
-    }
-}
+impl BasicArithmetic for XYZ {}
 
 #[cfg(test)]
 mod tests {

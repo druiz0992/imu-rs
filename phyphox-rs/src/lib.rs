@@ -18,6 +18,6 @@
 pub(crate) mod adapters;
 pub(crate) mod constants;
 mod helpers;
-pub(crate) mod models;
+pub mod models;
 pub(crate) mod ports;
 pub mod services;

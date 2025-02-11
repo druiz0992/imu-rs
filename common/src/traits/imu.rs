@@ -1,34 +1,37 @@
-use crate::SensorType;
-use std::iter::Iterator;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 
-/// Untimed sample from an IMU (Inertial Measurement Unit).
-pub trait IMUUntimedSample:
-    Send
-    + Sync
-    + Clone
-    + Default
-    + Add<Output = Self>
+use crate::types::sensors::SensorType;
+
+pub trait VecF64Convertible: Into<Vec<f64>> + TryFrom<Vec<f64>> + Sized {}
+impl<T: Into<Vec<f64>> + TryFrom<Vec<f64>> + Sized> VecF64Convertible for T {}
+
+pub trait BasicArithmetic:
+    Sized
     + AddAssign
+    + Add<Output = Self>
+    + SubAssign
+    + Sub<Output = Self>
     + Div<f64, Output = Self>
     + Mul<f64, Output = Self>
-    + Sub<Output = Self>
-    + SubAssign
-    + 'static
 {
+}
+
+/// Untimed sample from an IMU (Inertial Measurement Unit).
+pub trait IMUUntimedSample: Send + Sync + Clone + Default + 'static {
     ///  Returns the measurement data as a vector of `f64` values.
-    fn get_measurement(&self) -> Vec<f64>;
-    fn from_timed(timed_samples: Vec<f64>) -> Option<Self>;
+    fn get_measurement(&self) -> Self;
 }
 
 /// Timed sample from an IMU (Inertial Measurement Unit).
 pub trait IMUSample: Send + Sync + Clone + Default + 'static {
+    type Untimed: IMUUntimedSample;
+
     ///  Returns the timestamp of the sample.
     fn get_timestamp(&self) -> f64;
     ///  Returns the measurement data
-    fn get_measurement(&self) -> Vec<f64>;
+    fn get_measurement(&self) -> Self::Untimed;
     /// Returns a IMUSample
-    fn from_untimed(sample: Vec<f64>, timestamp: f64) -> Self;
+    fn from_measurement(timestamp: f64, measurement: Self::Untimed) -> Self;
 }
 
 /// Collection of sensor readings from an IMU (Inertial Measurement Unit).
@@ -45,27 +48,14 @@ pub trait IMUReadings<T: IMUSample>: Send + Sync + Clone {
     fn from_vec(tag: &str, readings_type: SensorType, data: Vec<T>) -> Self;
     ///   Clears stored samples
     fn clear(&mut self);
-    ///   Returns an iterator over references to the samples.
-    fn iter_samples(&self) -> impl Iterator<Item = &T> {
-        self.get_samples_ref().iter()
-    }
-    ///   Returns an iterator over samples.
-    #[allow(clippy::wrong_self_convention)]
-    fn into_iter_samples(&self) -> impl Iterator<Item = T> {
-        self.get_samples().into_iter()
-    }
 }
 
-/// Resampling for IMU (Inertial Measurement Unit) samples.
-pub trait IMUResampler<T: IMUSample>: Send + Sync {
+pub trait IMUFilter<T>: Send + Sync
+where
+    T: IMUSample,
+{
     ///  Returns the resampled samples
-    fn resample(&self, samples: Vec<T>, sampling_time: f64, cache: &mut Vec<T>) -> Vec<T>;
-}
-
-/// Filtering for IMU (Inertial Measurement Unit) samples.
-pub trait IMUFilter<T: IMUUntimedSample>: Send + Sync {
-    /// Returns the filtered samples
-    fn filter(&mut self, samples: Vec<T>) -> Vec<T>;
+    fn filter_batch(&mut self, samples: Vec<T>) -> Result<Vec<T>, &str>;
 }
 
 /*

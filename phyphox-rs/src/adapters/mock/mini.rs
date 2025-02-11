@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use common::{Sample3D, SensorReadings};
 use rand::{rngs::StdRng, SeedableRng};
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,7 +10,11 @@ use super::timestamp::Timestamp;
 use crate::constants::N_SENSORS;
 use crate::models::errors::PhyphoxError;
 use crate::ports::PhyphoxPort;
-use common::{buffers::CircularReader, IMUReadings, IMUSample, SensorType};
+use common::types::buffers::CircularReader;
+use common::types::sensors::{SensorReadings, SensorType};
+use common::types::timed::Sample3D;
+use common::types::untimed::XYZ;
+use common::{IMUReadings, IMUSample};
 use publisher::{Publishable, Publisher};
 use test_utils::csv_loader::{self, CsvColumnMapper};
 
@@ -93,13 +96,17 @@ impl PhyphoxMock {
                     .abs();
                 if sample_timestamp < timestamps.get_current_timestamp() {
                     timestamps.set_reading_timestamp(buffer_idx, sample_timestamp);
-                    let mut next_measurement = next_sample.get_measurement();
+                    let mut next_measurement: Vec<f64> = next_sample.get_measurement().into();
 
                     if self.sensor_noise.is_some() {
                         let rgen = self.sensor_noise.as_ref().unwrap();
                         next_measurement = rgen.add_noise_vec(&mut rng, next_measurement);
                     }
-                    new_samples.push(Sample3D::from_untimed(next_measurement, sample_timestamp))
+                    let next_measurement: XYZ = XYZ::try_from(next_measurement).unwrap();
+                    new_samples.push(Sample3D::from_measurement(
+                        sample_timestamp,
+                        next_measurement,
+                    ))
                 } else {
                     break;
                 }
