@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 nalgebra.workspace = true
+async-trait.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 once_cell = "1.18"

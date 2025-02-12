@@ -1,6 +1,6 @@
 use common::traits::imu::IMUFilter;
+use common::traits::{IMUSample, IMUUntimedSample};
 use common::types::filters::{MovingAverage, WeightedMovingAverage};
-use common::{IMUSample, IMUUntimedSample};
 
 /// Computes the simple average of the time, x, y, and z components of the given samples.
 ///

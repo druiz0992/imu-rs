@@ -1,5 +1,6 @@
+use async_trait::async_trait;
 use log::error;
-use publisher::{Listener, Publishable, Publisher};
+use publisher::PublisherManager;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -7,18 +8,12 @@ use uuid::Uuid;
 
 use crate::adapters::{mock::PhyphoxMock, production::Phyphox};
 /// Generic Phyphox service
-use crate::constants::N_SENSORS;
 use crate::models::errors::PhyphoxError;
 use crate::models::shutdown;
 use crate::ports::PhyphoxPort;
+use common::traits::{IMUSource, Notifiable};
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
-
-const SENSOR_CLUSTER: [SensorType; N_SENSORS] = [
-    SensorType::Accelerometer,
-    SensorType::Gyroscope,
-    SensorType::Magnetometer,
-];
 
 /// Configuration of Phyphox service
 pub struct PhyphoxService<C>
@@ -26,7 +21,7 @@ where
     C: PhyphoxPort,
 {
     client: C,
-    publisher: [Publisher<SensorReadings<Sample3D>>; N_SENSORS],
+    publishers: PublisherManager<SensorReadings<Sample3D>, SensorType>,
     abort_signal: Arc<Notify>,
 }
 
@@ -38,41 +33,21 @@ where
     /// Returns an ClientBuild error if Http client to connect to Phyphox API cannot be created
     pub fn new(client: C) -> Self {
         let abort_signal = Arc::new(Notify::new());
+        let sensor_cluster = vec![
+            SensorType::Accelerometer,
+            SensorType::Gyroscope,
+            SensorType::Magnetometer,
+        ];
+
+        let publishers = PublisherManager::new(&sensor_cluster);
 
         PhyphoxService {
             client,
             abort_signal,
-            publisher: std::array::from_fn(|_| Publisher::new()),
+            publishers,
         }
     }
 
-    // Registers a accelerometer/gyroscope/magentometer listener functions to be called whenever new samples are available.
-    // Returns the id of the registered listener.
-    pub async fn register_listener(
-        &self,
-        mut listener: Listener<SensorReadings<Sample3D>>,
-        sensor_type: SensorType,
-    ) -> Uuid {
-        let sensor_idx = usize::from(sensor_type);
-        self.publisher[sensor_idx]
-            .register_listener(&mut listener)
-            .await
-    }
-
-    // Unregisters a accelerometer/gyroscope/magnetometer listeners from the list of registered listeners.
-    pub async fn unregister_listener(&self, id: Uuid, sensor_type: SensorType) {
-        let sensor_idx = usize::from(sensor_type);
-        self.publisher[sensor_idx].unregister_listener(id).await;
-    }
-
-    pub async fn notify_listeners(
-        &self,
-        sensor_type: SensorType,
-        data: Arc<SensorReadings<Sample3D>>,
-    ) {
-        let sensor_idx = usize::from(sensor_type);
-        self.publisher[sensor_idx].notify_listeners(data).await;
-    }
     /// Starts the data acquisition process. The process is stopped with a SIGINT signal
     /// Returns FetchData error if it can't connect to REST API.
     pub async fn start(
@@ -83,15 +58,47 @@ where
     ) -> Result<(), PhyphoxError> {
         let abort_signal = self.abort_signal.clone();
         shutdown::listen_for_shutdown(Arc::clone(&abort_signal), run_for_millis);
+        let sensor_cluster = self.publishers.get_available_publisher_types().await;
+        let publishers = self.publishers.get_publishers().await;
         self.client
             .start(
                 period_millis,
-                &SENSOR_CLUSTER,
+                &sensor_cluster,
                 Some(self.abort_signal.clone()),
                 window_size,
-                Some(self.publisher.clone()),
+                Some(publishers),
             )
             .await
+    }
+}
+
+#[async_trait]
+impl<C> IMUSource<SensorReadings<Sample3D>, Sample3D> for PhyphoxService<C>
+where
+    C: PhyphoxPort + Send + Sync,
+{
+    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
+        self.client.get_available_sensors().await
+    }
+
+    fn get_tag(&self) -> &str {
+        self.client.get_tag()
+    }
+
+    async fn unregister_listener(&self, id: Uuid) {
+        let _ = self.publishers.remove_listener(id).await;
+    }
+
+    async fn register_listener(
+        &self,
+        listener: &mut dyn Notifiable<SensorReadings<Sample3D>>,
+        sensor_type: SensorType,
+    ) -> Result<Uuid, String> {
+        self.publishers.add_listener(listener, sensor_type).await
+    }
+
+    async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<SensorReadings<Sample3D>>) {
+        self.publishers.notify_listeners(sensor_type, data).await
     }
 }
 
@@ -116,6 +123,7 @@ pub fn run_service(
 ) -> Result<(tokio::task::JoinHandle<()>, Arc<PhyphoxService<Phyphox>>), PhyphoxError> {
     let phyphox = Phyphox::new(base_url, sensor_cluster_tag)?;
     let phyphox_service: Arc<PhyphoxService<Phyphox>> = Arc::new(PhyphoxService::new(phyphox));
+
     let handle = tokio::spawn({
         let phyphox_service_clone = phyphox_service.clone();
         async move {

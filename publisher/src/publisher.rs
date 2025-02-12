@@ -4,27 +4,23 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::listener::{Callback, Notifiable};
+use common::traits::Notifiable;
+use common::types::Callback;
 
 #[async_trait]
 pub trait Publishable<T> {
     async fn register_listener(&self, listener: &mut dyn Notifiable<T>) -> Uuid;
     async fn unregister_listener(&self, listener_id: Uuid);
+    async fn unregister_all(&self);
     async fn notify_listeners(&self, data: Arc<T>);
 }
 
 #[derive(Clone, Default)]
-pub struct Publisher<T>
-where
-    T: Send + Sync + 'static,
-{
+pub struct Publisher<T> {
     listeners: Arc<Mutex<HashMap<Uuid, Callback<T>>>>,
 }
 
-impl<T> Publisher<T>
-where
-    T: Send + Sync + 'static,
-{
+impl<T> Publisher<T> {
     pub fn new() -> Self {
         Self {
             listeners: Arc::new(Mutex::new(HashMap::new())),
@@ -44,6 +40,10 @@ where
         let mut listeners = self.listeners.lock().await;
         listeners.insert(listener_id, callback);
         listener_id
+    }
+    async fn unregister_all(&self) {
+        let mut listeners = self.listeners.lock().await;
+        listeners.clear();
     }
 
     async fn unregister_listener(&self, listener_id: Uuid) {

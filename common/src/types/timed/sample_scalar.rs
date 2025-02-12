@@ -1,5 +1,5 @@
+use crate::traits::IMUSample;
 use crate::types::untimed::Scalar;
-use crate::IMUSample;
 /// A structure representing a 1D sample with a timestamp and measurement.
 ///
 /// # Examples

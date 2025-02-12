@@ -7,8 +7,8 @@ use log::error;
 use std::sync::Arc;
 
 use common::traits::imu::{IMUFilter, IMUUntimedSample};
+use common::traits::{IMUReadings, IMUSample};
 use common::types::filters::{MovingAverage, WeightedMovingAverage};
-use common::{IMUReadings, IMUSample};
 use resampler::{ResamplePolicy, Resampler};
 
 /// Runs the main application logic asynchronously, managing sensors and data processing.

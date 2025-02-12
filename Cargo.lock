@@ -186,8 +186,10 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "common"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "nalgebra",
  "once_cell",
+ "uuid",
 ]
 
 [[package]]
@@ -1220,6 +1222,7 @@ name = "publisher"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "common",
  "env_logger",
  "log",
  "tokio",

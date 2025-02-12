@@ -7,10 +7,10 @@ use nalgebra::Vector3;
 use uuid::Uuid;
 
 use common::traits::imu::VecF64Convertible;
+use common::traits::{IMUReadings, IMUSample};
 use common::types::sensors::SensorType;
 use common::types::timed::SampleQuaternion;
 use common::types::untimed::UnitQuaternion;
-use common::{IMUReadings, IMUSample};
 use publisher::{Listener, Publishable, Publisher};
 
 const MADGWICK_BETA: f64 = 0.1;

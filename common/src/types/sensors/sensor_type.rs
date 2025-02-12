@@ -21,7 +21,7 @@
 /// let sensor = SensorType::from("unknown");
 /// assert_eq!(sensor, SensorType::Other(String::from("unknown")));
 /// ```
-#[derive(Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Hash, Eq)]
 #[repr(usize)]
 pub enum SensorType {
     Accelerometer = 0,

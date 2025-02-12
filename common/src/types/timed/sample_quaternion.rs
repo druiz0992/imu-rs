@@ -1,6 +1,6 @@
+use crate::traits::IMUSample;
 use crate::types::untimed::unit_quaternion::{N_QUATERNION_COORDINATES, W_QUATERNION_COORD_IDX};
 use crate::types::untimed::UnitQuaternion;
-use crate::IMUSample;
 
 /// A structure representing a quaternion sample with a timestamp.
 ///

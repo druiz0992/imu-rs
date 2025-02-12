@@ -10,11 +10,11 @@ use super::timestamp::Timestamp;
 use crate::constants::N_SENSORS;
 use crate::models::errors::PhyphoxError;
 use crate::ports::PhyphoxPort;
+use common::traits::{IMUReadings, IMUSample};
 use common::types::buffers::CircularReader;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use common::types::untimed::XYZ;
-use common::{IMUReadings, IMUSample};
 use publisher::{Publishable, Publisher};
 use test_utils::csv_loader::{self, CsvColumnMapper};
 
@@ -139,7 +139,7 @@ impl PhyphoxPort for PhyphoxMock {
         sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         _window_size: Option<usize>,
-        publisher: Option<[Publisher<SensorReadings<Sample3D>>; N_SENSORS]>,
+        publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
         loop {
@@ -166,6 +166,18 @@ impl PhyphoxPort for PhyphoxMock {
         }
 
         Ok(())
+    }
+
+    fn get_tag(&self) -> &str {
+        self.sensor_cluster_tag.as_str()
+    }
+
+    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
+        Ok(vec![
+            SensorType::Accelerometer,
+            SensorType::Gyroscope,
+            SensorType::Magnetometer,
+        ])
     }
 }
 

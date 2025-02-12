@@ -3,7 +3,7 @@ use nalgebra::Vector3;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 
 use crate::traits::imu::BasicArithmetic;
-use crate::IMUUntimedSample;
+use crate::traits::IMUUntimedSample;
 
 pub const N_XYZ_COORDINATES: usize = 3;
 

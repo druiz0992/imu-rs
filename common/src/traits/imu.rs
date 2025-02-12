@@ -1,5 +1,9 @@
+use async_trait::async_trait;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
+use std::sync::Arc;
+use uuid::Uuid;
 
+use crate::traits::Notifiable;
 use crate::types::sensors::SensorType;
 
 pub trait VecF64Convertible: Into<Vec<f64>> + TryFrom<Vec<f64>> + Sized {}
@@ -58,15 +62,19 @@ where
     fn filter_batch(&mut self, samples: Vec<T>) -> Result<Vec<T>, &str>;
 }
 
-/*
-pub trait IMUSource {
+#[async_trait]
+pub trait IMUSource<T, S>: Send + Sync
+where
+    T: Send + Sync + IMUReadings<S>,
+    S: Send + Sync + IMUSample,
+{
     fn get_tag(&self) -> &str;
-    fn get_available_sensors(&self, sensor_type: SensorType) -> bool;
+    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String>;
+    async fn unregister_listener(&self, id: Uuid);
     async fn register_listener(
         &self,
-        mut listener: Listener<T>,
+        listener: &mut dyn Notifiable<T>,
         sensor_type: SensorType,
-    ) -> Uuid;
-    fn unregister_listener(&self)
+    ) -> Result<Uuid, String>;
+    async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<T>);
 }
-    */

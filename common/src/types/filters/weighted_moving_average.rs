@@ -1,7 +1,7 @@
 use crate::traits::imu::BasicArithmetic;
+use crate::traits::{IMUFilter, IMUSample, IMUUntimedSample};
 use crate::types::timed::SampleQuaternion;
 use crate::types::untimed::UnitQuaternion;
-use crate::{IMUFilter, IMUSample, IMUUntimedSample};
 use std::marker::PhantomData;
 
 /// A weighted moving average filter for IMU data.

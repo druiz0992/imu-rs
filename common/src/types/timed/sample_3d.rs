@@ -1,5 +1,5 @@
+use crate::traits::IMUSample;
 use crate::types::untimed::{xyz::N_XYZ_COORDINATES, XYZ};
-use crate::IMUSample;
 /// A structure representing a 3D sample with a timestamp and measurement.
 ///
 /// # Examples

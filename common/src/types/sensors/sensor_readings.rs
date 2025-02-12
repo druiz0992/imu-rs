@@ -1,5 +1,5 @@
 use super::{SensorTag, SensorType};
-use crate::{IMUReadings, IMUSample};
+use crate::traits::{IMUReadings, IMUSample};
 
 const DEFAULT_SENSOR_BUFFER_CAPACITY: usize = 64;
 

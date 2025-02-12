@@ -11,11 +11,11 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tokio::sync::Notify;
 
+use common::traits::{IMUFilter, IMUReadings, IMUSample};
 use common::types::filters::moving_average::MovingAverage;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use common::types::untimed::XYZ;
-use common::{IMUFilter, IMUReadings, IMUSample};
 use publisher::{Publishable, Publisher};
 
 use crate::constants::N_SENSORS;
@@ -53,25 +53,6 @@ impl Phyphox {
     /// Returns JSON data from the specified path or FetchData error if it couldnt retrieve data from REST API
     async fn fetch_json(&self, path: &str) -> Result<Value, PhyphoxError> {
         self.client.fetch_json(path).await
-    }
-
-    /// Returns available sensors in phyphox
-    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, PhyphoxError> {
-        let json = self.fetch_json(CONFIG_CMD).await?;
-        let mut available_sensors: Vec<SensorType> = vec![];
-
-        if let Some(exports) = json.get("export").and_then(|e| e.as_array()) {
-            available_sensors = exports
-                .iter()
-                .filter_map(|entry| {
-                    entry
-                        .get("set")
-                        .and_then(|s| s.as_str())
-                        .and_then(|s| s.try_into().ok())
-                })
-                .collect();
-        }
-        Ok(available_sensors)
     }
 
     /// Returns a tuple containing the retrieved sensor data and a flag indicating if sensor is still active
@@ -127,7 +108,7 @@ impl PhyphoxPort for Phyphox {
         sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         window_size: Option<usize>,
-        publisher: Option<[Publisher<SensorReadings<Sample3D>>; N_SENSORS]>,
+        publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
         self.clear_cmd().await?;
         self.start_cmd().await?;
@@ -141,7 +122,10 @@ impl PhyphoxPort for Phyphox {
                 vec![Some(MovingAverage::new(w_size)); N_SENSORS]
             });
 
-        let active_sensor = self.get_available_sensors().await?;
+        let active_sensor = self
+            .get_available_sensors()
+            .await
+            .map_err(|e| PhyphoxError::Other(e.to_string()))?;
 
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
 
@@ -196,6 +180,31 @@ impl PhyphoxPort for Phyphox {
 
         self.stop_cmd().await?;
         Ok(())
+    }
+    fn get_tag(&self) -> &str {
+        self.sensor_cluster_tag.as_str()
+    }
+
+    /// Returns available sensors in phyphox
+    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
+        let json = self
+            .fetch_json(CONFIG_CMD)
+            .await
+            .map_err(|_| "Error retrieving available sensors".to_string())?;
+        let mut available_sensors: Vec<SensorType> = vec![];
+
+        if let Some(exports) = json.get("export").and_then(|e| e.as_array()) {
+            available_sensors = exports
+                .iter()
+                .filter_map(|entry| {
+                    entry
+                        .get("set")
+                        .and_then(|s| s.as_str())
+                        .and_then(|s| s.try_into().ok())
+                })
+                .collect();
+        }
+        Ok(available_sensors)
     }
 }
 

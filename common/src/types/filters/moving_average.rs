@@ -1,8 +1,8 @@
 use crate::traits::imu::BasicArithmetic;
+use crate::traits::{IMUFilter, IMUSample, IMUUntimedSample};
 use crate::types::buffers::CircularBuffer;
 use crate::types::timed::SampleQuaternion;
 use crate::types::untimed::UnitQuaternion;
-use crate::{IMUFilter, IMUSample, IMUUntimedSample};
 
 /// A moving average filter for IMU (Inertial Measurement Unit) data.
 /// The moving average filter is used to smooth out short-term fluctuations and highlight longer-term trends in the data.

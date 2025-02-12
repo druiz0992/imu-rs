@@ -3,13 +3,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use uuid::Uuid;
 
-pub type Callback<T> =
-    Arc<dyn Fn(Uuid, Arc<T>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
-
-pub trait Notifiable<T>: Sync + Send {
-    fn get_callback(&self) -> Callback<T>;
-    fn set_id(&mut self, id: Uuid);
-}
+use common::traits::Notifiable;
+use common::types::Callback;
 
 #[derive(Clone)]
 pub struct Listener<T> {

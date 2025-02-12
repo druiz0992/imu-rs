@@ -1,6 +1,6 @@
 use nalgebra::UnitQuaternion as NUnitQuaternion;
 
-use crate::IMUUntimedSample;
+use crate::traits::IMUUntimedSample;
 
 pub(crate) const W_QUATERNION_COORD_IDX: usize = 0;
 pub(crate) const X_QUATERNION_COORD_IDX: usize = 1;
@@ -79,5 +79,114 @@ impl TryFrom<Vec<f64>> for UnitQuaternion {
         let array: [f64; N_QUATERNION_COORDINATES] =
             value.try_into().map_err(|_| "Conversion failed")?;
         Ok(UnitQuaternion::new(array))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra::{Quaternion, UnitQuaternion as NUnitQuaternion};
+
+    #[test]
+    fn test_unit_quaternion_new() {
+        let data = [1.0, 0.0, 0.0, 0.0];
+        let unit_quaternion = UnitQuaternion::new(data);
+        assert_eq!(
+            unit_quaternion.inner().quaternion(),
+            &Quaternion::new(1.0, 0.0, 0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn test_default_quaternion_new() {
+        let data = [1.0, 0.0, 0.0, 0.0];
+        let default_quaternion = UnitQuaternion::default();
+        let unit_quaternion = UnitQuaternion::new(data);
+        assert_eq!(
+            <[f64; 4]>::from(UnitQuaternion::from_unit_quaternion(
+                NUnitQuaternion::<f64>::identity()
+            )),
+            data
+        );
+        assert_eq!(unit_quaternion, default_quaternion);
+        assert_eq!(unit_quaternion.inner(), NUnitQuaternion::<f64>::identity());
+    }
+
+    #[test]
+    fn test_unit_quaternion_from_quaternion() {
+        let quaternion = Quaternion::new(1.0, 0.0, 0.0, 0.0);
+        let unit_quaternion = UnitQuaternion::from_quaternion(quaternion);
+        assert_eq!(
+            unit_quaternion.inner().quaternion(),
+            &Quaternion::new(1.0, 0.0, 0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn test_unit_quaternion_from_unit_quaternion() {
+        let unit_quaternion =
+            nalgebra::UnitQuaternion::new_unchecked(Quaternion::new(1.0, 0.0, 0.0, 0.0));
+        let unit_quaternion_wrapper = UnitQuaternion::from_unit_quaternion(unit_quaternion.clone());
+        assert_eq!(unit_quaternion_wrapper.inner(), unit_quaternion);
+    }
+
+    #[test]
+    fn test_unit_quaternion_default() {
+        let default_quaternion = UnitQuaternion::default();
+        assert_eq!(
+            default_quaternion.inner(),
+            nalgebra::UnitQuaternion::default()
+        );
+    }
+
+    #[test]
+    fn test_unit_quaternion_get_measurement() {
+        let data = [1.0, 0.0, 0.0, 0.0];
+        let unit_quaternion = UnitQuaternion::new(data);
+        let measurement = unit_quaternion.get_measurement();
+        assert_eq!(measurement, unit_quaternion);
+    }
+
+    #[test]
+    fn test_unit_quaternion_into_array() {
+        let data = [1.0, 0.0, 0.0, 0.0];
+        let unit_quaternion = UnitQuaternion::new(data);
+        let array: [f64; N_QUATERNION_COORDINATES] = unit_quaternion.into();
+        assert_eq!(array, data);
+    }
+
+    #[test]
+    fn test_unit_quaternion_from_array() {
+        let data = [1.0, 0.0, 0.0, 0.0];
+        let unit_quaternion: UnitQuaternion = data.into();
+        assert_eq!(
+            unit_quaternion.inner().quaternion(),
+            &Quaternion::new(1.0, 0.0, 0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn test_unit_quaternion_into_vec() {
+        let data = [1.0, 0.0, 0.0, 0.0];
+        let unit_quaternion = UnitQuaternion::new(data);
+        let vec: Vec<f64> = unit_quaternion.into();
+        assert_eq!(vec, data.to_vec());
+    }
+
+    #[test]
+    fn test_unit_quaternion_try_from_vec_success() {
+        let data = vec![1.0, 0.0, 0.0, 0.0];
+        let unit_quaternion = UnitQuaternion::try_from(data.clone()).unwrap();
+        assert_eq!(
+            unit_quaternion.inner().quaternion(),
+            &Quaternion::new(1.0, 0.0, 0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn test_unit_quaternion_try_from_vec_failure() {
+        let data = vec![1.0, 0.0, 0.0];
+        let result = UnitQuaternion::try_from(data);
+        assert!(result.is_err());
     }
 }

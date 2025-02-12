@@ -8,7 +8,6 @@ use common::types::timed::Sample3D;
 use common::types::{SensorReadings, SensorType};
 use publisher::Publisher;
 
-use crate::constants::N_SENSORS;
 use crate::models::errors::PhyphoxError;
 
 #[async_trait]
@@ -21,6 +20,9 @@ pub trait PhyphoxPort {
         sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         window_size: Option<usize>,
-        publisher: Option<[Publisher<SensorReadings<Sample3D>>; N_SENSORS]>,
+        publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError>;
+
+    fn get_tag(&self) -> &str;
+    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String>;
 }

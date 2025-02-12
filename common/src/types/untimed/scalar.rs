@@ -1,7 +1,7 @@
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 
 use crate::traits::imu::BasicArithmetic;
-use crate::IMUUntimedSample;
+use crate::traits::IMUUntimedSample;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Default)]
 pub struct Scalar(f64);

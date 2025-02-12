@@ -6,8 +6,8 @@ use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
+use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUUntimedSample};
 use common::types::sensors::SensorType;
-use common::{IMUFilter, IMUReadings, IMUSample, IMUUntimedSample};
 use publisher::{Listener, Publishable, Publisher};
 
 use crate::utils;
@@ -291,9 +291,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use common::traits::Notifiable;
     use common::types::sensors::SensorReadings;
     use common::types::timed::Sample3D;
-    use publisher::{listener, Listener, Notifiable};
+    use publisher::{listener, Listener};
 
     #[tokio::test]
     async fn test_callback() {

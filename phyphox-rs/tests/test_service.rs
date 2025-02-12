@@ -5,9 +5,10 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use common::traits::{IMUReadings, IMUSample, IMUSource};
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
-use common::{IMUReadings, IMUSample};
+
 #[tokio::test]
 async fn test_receive_accelerometer_samples() {
     let sensor_tag = "Test";
@@ -29,7 +30,7 @@ async fn test_receive_accelerometer_samples() {
     .unwrap();
 
     // create listener handler
-    let listener = {
+    let mut listener = {
         let received_samples = received_samples.clone();
         let received_id = received_id.clone();
         Listener::new(move |id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
@@ -48,8 +49,9 @@ async fn test_receive_accelerometer_samples() {
 
     // install handler
     let expected_id = phyphox
-        .register_listener(listener, SensorType::Accelerometer)
-        .await;
+        .register_listener(&mut listener, SensorType::Accelerometer)
+        .await
+        .unwrap();
 
     handle.await.unwrap();
 
@@ -100,11 +102,13 @@ async fn test_receive_multiple_sensors() {
 
     // install handlers
     let accel_id = phyphox
-        .register_listener(listener.clone(), SensorType::Accelerometer)
-        .await;
+        .register_listener(&mut listener.clone(), SensorType::Accelerometer)
+        .await
+        .unwrap();
     let gyro_id = phyphox
-        .register_listener(listener.clone(), SensorType::Gyroscope)
-        .await;
+        .register_listener(&mut listener.clone(), SensorType::Gyroscope)
+        .await
+        .unwrap();
 
     handle.await.unwrap();
 
@@ -136,7 +140,7 @@ async fn test_stop_receiving_accelerometer_samples() {
     .unwrap();
 
     // create listener handler
-    let listener = {
+    let mut listener = {
         let received_samples = received_samples.clone();
         Listener::new(move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
             let buffer = received_samples.clone();
@@ -151,14 +155,13 @@ async fn test_stop_receiving_accelerometer_samples() {
 
     // install handler
     let id = phyphox
-        .register_listener(listener, SensorType::Accelerometer)
-        .await;
+        .register_listener(&mut listener, SensorType::Accelerometer)
+        .await
+        .unwrap();
 
     // wait 2 seconds and unregister handler
     tokio::time::sleep(Duration::from_millis(2000)).await;
-    phyphox
-        .unregister_listener(id, SensorType::Accelerometer)
-        .await;
+    phyphox.unregister_listener(id).await;
 
     handle.await.unwrap();
 
