@@ -1,20 +1,26 @@
+use async_trait::async_trait;
 use common::types::filters::moving_average::MovingAverage;
 use common::types::filters::weighted_moving_average::WeightedMovingAverage;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::{error::Error, marker::PhantomData};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUUntimedSample};
+use common::traits::{
+    IMUFilter, IMUReadings, IMUSample, IMUSink, IMUSource, IMUUntimedSample, Notifiable,
+};
 use common::types::sensors::SensorType;
-use publisher::{Listener, Publishable, Publisher};
+use publisher::listener;
+use publisher::Listener;
+use publisher::PublisherManager;
 
 use crate::utils;
 
 const MIN_RESAMPLING_PERIOD_MILLIS: u64 = 5;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub enum ResamplePolicy {
     Averaging,
     FirstSample,
@@ -23,7 +29,8 @@ pub enum ResamplePolicy {
     WeightedAverage,
 }
 
-pub struct Resampler<S, T>
+#[derive(Clone)]
+pub struct Resampler<T, S>
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
@@ -31,12 +38,14 @@ where
     MovingAverage<S::Untimed>: IMUFilter<S>,
     WeightedMovingAverage<S::Untimed>: IMUFilter<S>,
 {
-    buffer: Vec<Mutex<T>>,
-    publisher: Vec<Publisher<T>>,
+    buffer: Arc<RwLock<HashMap<SensorType, Mutex<T>>>>,
+    publishers: PublisherManager<T, SensorType>,
+    tag: String,
+    sensor_cluster: Vec<SensorType>,
     _phantom_data: PhantomData<S>,
 }
 
-impl<S, T> Resampler<S, T>
+impl<T, S> Resampler<T, S>
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
@@ -44,74 +53,18 @@ where
     MovingAverage<S::Untimed>: IMUFilter<S>,
     WeightedMovingAverage<S::Untimed>: IMUFilter<S>,
 {
-    pub fn new(n_buffer: usize, tag: &str) -> Self {
+    pub fn new(tag: &str, sensor_cluster: Vec<SensorType>) -> Self {
+        let buffer: HashMap<SensorType, Mutex<T>> = sensor_cluster
+            .iter()
+            .map(|s| (s.clone(), Mutex::new(T::from_vec(tag, s.clone(), vec![]))))
+            .collect();
         Self {
-            buffer: (0..n_buffer)
-                .map(|_| Mutex::new(T::from_vec(tag, SensorType::Accelerometer, vec![])))
-                .collect(),
-            publisher: (0..n_buffer).map(|_| Publisher::new()).collect(),
+            buffer: Arc::new(RwLock::new(buffer)),
+            publishers: PublisherManager::new(&sensor_cluster),
+            tag: tag.to_string(),
+            sensor_cluster,
             _phantom_data: PhantomData,
         }
-    }
-    /*
-    pub fn request_measurements(&self, source: &dyn IMUSource, sensor_type: SensorType) {
-        // get tag
-        // let tag = source.get_cluster_tag();
-        // if source.is_sensor_available(sensor_type) {
-        // if sensor is not availabe, error
-        //  todo!();
-        // }
-        // create listener;
-        //   listeer = new listener(self.handle);
-
-        // register listener to IMUSource
-        //   let id = source.register_listener(listener, sensor_type)
-
-        // add listener id to collector
-        //   self.add_new_measurement(id, tag, sensor_type)
-        todo!();
-
-        // methds for IMUSource
-        // get_tag()
-        // get_sensors()
-        // register_listener()
-        // unrgister_listener()
-        // notify_listeners();
-
-        // method for IMUSink
-        // self.handle(uuid, arc<T>)
-        // self.add_new_measurement(id, tag, sensor_type)
-        // self.remove_measurement(id, sensor_type)
-        // self.remove_cluster(id, tag)
-    }
-    */
-
-    // Registers a accelerometer/gyroscope/magentometer listener functions to be called whenever new samples are available.
-    // Returns the id of the registered listener.
-    async fn register_sensor(&self, mut listener: Listener<T>, sensor_type: SensorType) -> Uuid {
-        let sensor_idx = usize::from(sensor_type);
-        self.publisher[sensor_idx]
-            .register_listener(&mut listener)
-            .await
-    }
-
-    // Unregisters a accelerometer/gyroscope/magnetometer listeners from the list of registered listeners.
-    async fn unregister_sensor(&self, id: Uuid, sensor_type: SensorType) {
-        let sensor_idx = usize::from(sensor_type);
-        self.publisher[sensor_idx].unregister_listener(id).await;
-    }
-
-    pub async fn handle(&self, _id: Uuid, measurement: Arc<T>) {
-        let a = measurement.get_samples().get(0).cloned();
-        match a {
-            Some(_) => println!("SOMTHING"),
-            None => print!("NODAD"),
-        }
-    }
-    pub async fn handle_notification(&self, measurement: T, sensor_type: SensorType) {
-        let sensor_idx = usize::from(sensor_type);
-        let mut buffer = self.buffer[sensor_idx].lock().await;
-        buffer.extend(measurement.get_samples())
     }
 
     async fn apply_resampling_policies(
@@ -120,88 +73,68 @@ where
         resample_policy: &ResamplePolicy,
         resampling_period_millis: f64,
         timestamp: f64,
-        cache: &mut Vec<S>,
+        cache: &mut HashMap<SensorType, S>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        for (idx, imu_samples) in samples.into_iter().enumerate() {
+        for imu_samples in samples.into_iter() {
+            let sensor_type = imu_samples.get_sensor_type();
             let n_samples = imu_samples.get_samples().len();
-            // if no samples available, take last sample
-            if n_samples > 1 {
-                // apply redundant sample policy
-                cache[idx] = match resample_policy {
-                    ResamplePolicy::Averaging => utils::compute_average(imu_samples.get_samples())?,
-                    ResamplePolicy::FirstSample => {
-                        imu_samples.get_samples().get(0).cloned().unwrap()
-                    }
-                    ResamplePolicy::LastSample => imu_samples
-                        .get_samples()
-                        .get(n_samples - 1)
-                        .cloned()
-                        .unwrap(),
-                    ResamplePolicy::WeightedAverage => utils::compute_weighted_average(
-                        imu_samples.get_samples(),
-                        timestamp - resampling_period_millis / 2.0,
-                    )?,
+
+            // Match on the number of samples
+            match n_samples {
+                0 => {} // No samples, do nothing
+                1 => {
+                    let sample = imu_samples.get_samples().first().unwrap().clone();
+                    cache.insert(sensor_type.clone(), sample);
                 }
-            } else if n_samples == 1 {
-                cache[idx] = imu_samples.get_samples().get(0).cloned().unwrap();
+                _ => {
+                    // Apply redundant sample policy
+                    let resampled_samples = match resample_policy {
+                        ResamplePolicy::Averaging => {
+                            utils::compute_average(imu_samples.get_samples())?
+                        }
+                        ResamplePolicy::FirstSample => {
+                            imu_samples.get_samples().first().unwrap().clone()
+                        }
+                        ResamplePolicy::LastSample => imu_samples
+                            .get_samples()
+                            .get(n_samples - 1)
+                            .cloned()
+                            .unwrap(),
+                        ResamplePolicy::WeightedAverage => utils::compute_weighted_average(
+                            imu_samples.get_samples(),
+                            timestamp - resampling_period_millis / 2.0,
+                        )?,
+                    };
+                    cache.insert(sensor_type.clone(), resampled_samples);
+                }
             }
             {
-                let mut buffer = self.buffer[idx].lock().await;
-                buffer.extend(vec![cache[idx].clone()]);
+                if let Some(mutex) = self.buffer.read().await.get(&sensor_type) {
+                    let mut data = mutex.lock().await;
+                    let cache_element = cache.get(&sensor_type).unwrap().clone();
+                    data.extend(vec![cache_element]);
+                }
             }
         }
         Ok(())
     }
 
-    // v(t) = v_prev + (v_next - v_prev) * (t - t_prev) / (t_next - t_prev)
-    fn resample(&self, samples: Vec<[f64; 4]>, t_next: f64, cache: &mut Vec<[f64; 4]>) -> Vec<f64> {
-        let mut resampled_values = Vec::new();
-
-        resampled_values.push(t_next);
-        for i in 0..samples.len() {
-            let prev_sample = cache[i];
-            let next_sample = samples[i];
-            let timestamp = next_sample[0];
-
-            let t_prev = prev_sample[0];
-
-            for j in 1..4 {
-                let v_prev = prev_sample[j];
-                let v_next = next_sample[j];
-                let mut v =
-                    v_prev + (v_next - v_prev) * (timestamp - t_prev).abs() / (t_next - t_prev);
-                if v_prev == 0.0 {
-                    v = v_next
-                }
-                /*
-                println!(
-                    "RESAMPLE: v_prev: {}, v_next: {}, timestamp: {}, t_prev: {}, t_next: {}",
-                    v_prev, v_next, timestamp, t_prev, t_next
-                );
-                */
-                resampled_values.push(v);
-            }
-        }
-
-        resampled_values
-    }
-
     async fn samples_till_timestamp(&self, timestamp: f64, period: f64) -> Vec<T> {
         // Assumption is that we read samples within the timestamp limits, and the rest will be discarded
         // Earlier samples are too old. There shouldnt be any samples past timestamp.
-
-        let mut buffer_clone: Vec<_> = {
-            let mut clones = Vec::new();
-            for b in self.buffer.iter() {
-                let mut buffer = b.lock().await; // Lock and get mutable access
-                clones.push(buffer.clone()); // Clone before clearing
-                buffer.clear(); // Clear the original buffer
+        let buffer_read = self.buffer.read().await;
+        let sensor_types: Vec<&SensorType> = buffer_read.keys().collect();
+        let mut buffer_clone: Vec<T> = Vec::new();
+        for sensor_type in sensor_types {
+            if let Some(mutex) = self.buffer.read().await.get(sensor_type) {
+                let mut data = mutex.lock().await;
+                buffer_clone.push(data.clone());
+                data.clear();
             }
-            clones
-        };
+        }
 
         for sensor_buffer in buffer_clone.iter_mut() {
-            let filtered_samples: Vec<S> = sensor_buffer
+            let filtered_data: Vec<S> = sensor_buffer
                 .get_samples()
                 .into_iter()
                 .filter_map(|sample| {
@@ -217,21 +150,24 @@ where
                 })
                 .collect();
             sensor_buffer.clear();
-            sensor_buffer.extend(filtered_samples);
+            sensor_buffer.extend(filtered_data);
         }
 
         buffer_clone
     }
 
-    async fn notify_listeners(&self) {
-        for (idx, publisher) in self.publisher.iter().enumerate() {
-            let mut buffer = self.buffer[idx].lock().await;
-            let buffer_clone = buffer.clone();
-            buffer.clear();
-            publisher.notify_listeners(Arc::new(buffer_clone)).await;
+    async fn notify(&self) {
+        for sensor_type in &self.sensor_cluster {
+            if let Some(mutex) = self.buffer.read().await.get(sensor_type) {
+                let mut data = mutex.lock().await;
+                let buffer_clone = data.clone();
+                data.clear();
+                self.notify_listeners(sensor_type.clone(), Arc::new(buffer_clone))
+                    .await
+            }
         }
     }
-    // TODO: Cant be async.
+
     pub async fn start(
         &self,
         resampling_period_millis: u64,
@@ -245,7 +181,10 @@ where
         let resampling_policy = resampling_policy.unwrap_or_default();
         let resampling_duration_millis = Duration::from_millis(resampling_period_millis);
         let mut next_resampling_timestamp = resampling_duration_millis.as_secs_f64();
-        let mut cache = vec![S::default(); self.buffer.len()];
+        let mut cache = HashMap::<SensorType, S>::new();
+        for sensor_type in self.sensor_cluster.iter() {
+            cache.insert(sensor_type.clone(), S::default());
+        }
 
         sleep(resampling_duration_millis).await;
 
@@ -258,16 +197,6 @@ where
                     resampling_duration_millis.as_secs_f64(),
                 )
                 .await;
-            /*
-            println!(
-                "RAW SAMPLES ACC: {}, GY: {}, MA: {}, {:?} {:?}",
-                raw_samples[0].len(),
-                raw_samples[1].len(),
-                raw_samples[2].len(),
-                raw_samples,
-                next_resampling_timestamp.as_secs_f64()
-            );
-            */
 
             self.apply_resampling_policies(
                 raw_samples,
@@ -278,12 +207,71 @@ where
             )
             .await?;
 
-            //println!("RAW SAMPLES AFTER POLICY {:?} {:?}", raw_samples, cache);
-
-            //println!("RESAMPLED - {:?} - {:?}", self.tag.clone(), final_samples);
-            self.notify_listeners().await;
+            self.notify().await;
 
             next_resampling_timestamp += resampling_duration_millis.as_secs_f64();
+        }
+    }
+}
+
+#[async_trait]
+impl<T, S> IMUSource<T, S> for Resampler<T, S>
+where
+    S: IMUSample,
+    T: Send + Sync + IMUReadings<S> + 'static,
+    S::Untimed: IMUUntimedSample,
+    MovingAverage<S::Untimed>: IMUFilter<S>,
+    WeightedMovingAverage<S::Untimed>: IMUFilter<S>,
+{
+    fn get_tag(&self) -> &str {
+        self.tag.as_str()
+    }
+
+    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
+        Ok(self.publishers.get_available_publisher_types().await)
+    }
+
+    async fn unregister_listener(&self, id: Uuid) {
+        let _ = self.publishers.remove_listener(id).await;
+    }
+
+    async fn register_listener(
+        &self,
+        listener: &mut dyn Notifiable<T>,
+        sensor_type: &SensorType,
+    ) -> Result<Uuid, String> {
+        self.publishers.add_listener(listener, sensor_type).await
+    }
+
+    async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<T>) {
+        self.publishers.notify_listeners(sensor_type, data).await
+    }
+}
+
+#[async_trait]
+impl<T, S> IMUSink<T, S> for Resampler<T, S>
+where
+    S: Send + Sync + IMUSample,
+    T: Send + Sync + IMUReadings<S> + 'static,
+    MovingAverage<S::Untimed>: IMUFilter<S>,
+    WeightedMovingAverage<S::Untimed>: IMUFilter<S>,
+{
+    async fn attach_listener(
+        &self,
+        source: &dyn IMUSource<T, S>,
+        sensor_type: &SensorType,
+    ) -> Result<Uuid, String> {
+        let mut listener = listener!(self.process_samples);
+        source.register_listener(&mut listener, sensor_type).await
+    }
+    async fn detach_listener(&self, source: &dyn IMUSource<T, S>, id: Uuid) {
+        source.unregister_listener(id).await;
+    }
+    async fn process_samples(&self, _listener_id: Uuid, samples: Arc<T>) {
+        let sensor_type = samples.get_sensor_type();
+        if let Some(mutex) = self.buffer.read().await.get(&sensor_type) {
+            let mut data = mutex.lock().await;
+            data.extend(samples.get_samples());
         }
     }
 }
@@ -295,31 +283,71 @@ mod tests {
     use common::types::sensors::SensorReadings;
     use common::types::timed::Sample3D;
     use publisher::{listener, Listener};
+    use tokio::time::timeout;
 
-    #[tokio::test]
     async fn test_callback() {
-        let resampler = Arc::new(Resampler::<Sample3D, SensorReadings<_>>::new(3, "test"));
+        let acc_id = Uuid::new_v4();
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(acc_id),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
+        let resampler = Arc::new(Resampler::<SensorReadings<Sample3D>, _>::new(
+            "test",
+            sensor_cluster,
+        ));
+
         let listener_resampler = resampler.clone();
         let listener = Listener::new({
             move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
                 let resampler = listener_resampler.clone();
-                async move { resampler.handle(_id, value).await }
+                async move { resampler.process_samples(_id, value).await }
             }
         });
 
         let callback = listener.get_callback();
-        let buffer = resampler.buffer[0].lock().await;
-        callback(Uuid::new_v4(), Arc::new(buffer.clone())).await;
+        let buffer_read = resampler.buffer.read().await;
+        let buffer = buffer_read.get(&SensorType::Accelerometer(acc_id)).unwrap();
+
+        let data = buffer.lock().await;
+        let snapshot = data.clone();
+        drop(data);
+        callback(Uuid::new_v4(), Arc::new(snapshot.clone())).await;
     }
 
-    #[tokio::test]
     async fn test_callback_with_macro() {
-        let resampler = Arc::new(Resampler::<Sample3D, SensorReadings<_>>::new(3, "test"));
-        let listener = listener!(resampler.handle);
+        let acc_id = Uuid::new_v4();
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(acc_id),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
+        let resampler = Arc::new(Resampler::<SensorReadings<Sample3D>, _>::new(
+            "test",
+            sensor_cluster,
+        ));
+        let listener = listener!(resampler.process_samples);
 
         //let listener = listener!(resampler.handle);
         let callback = listener.get_callback();
-        let buffer = resampler.buffer[0].lock().await;
-        callback(Uuid::new_v4(), Arc::new(buffer.clone())).await;
+        let buffer_read = resampler.buffer.read().await;
+        let buffer = buffer_read.get(&SensorType::Accelerometer(acc_id)).unwrap();
+
+        let data = buffer.lock().await;
+        let snapshot = data.clone();
+        drop(data);
+        callback(Uuid::new_v4(), Arc::new(snapshot.clone())).await;
+    }
+
+    #[tokio::test]
+    async fn test_with_timeout() {
+        let result = timeout(Duration::from_secs(3), test_callback()).await;
+        if result.is_err() {
+            panic!("test_callback() aborted after 3 seconds");
+        }
+        let result = timeout(Duration::from_secs(3), test_callback_with_macro()).await;
+        if result.is_err() {
+            panic!("test_callback_with_macro() aborted after 3 seconds");
+        }
     }
 }

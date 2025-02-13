@@ -42,6 +42,7 @@ pub trait IMUSample: Send + Sync + Clone + Default + 'static {
 pub trait IMUReadings<T: IMUSample>: Send + Sync + Clone {
     ///   Returns the sensor tag
     fn get_sensor_tag(&self) -> &str;
+    fn get_sensor_type(&self) -> SensorType;
     ///   Returns samples
     fn get_samples(&self) -> Vec<T>;
     ///   Adds new samples
@@ -89,5 +90,5 @@ where
         sensor_type: &SensorType,
     ) -> Result<Uuid, String>;
     async fn detach_listener(&self, source: &dyn IMUSource<T, S>, id: Uuid);
-    async fn process_samples(&self, id: Uuid, samples: Arc<T>);
+    async fn process_samples(&self, listener_id: Uuid, samples: Arc<T>);
 }
