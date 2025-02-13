@@ -5,7 +5,7 @@ use crate::types::untimed::Scalar;
 /// # Examples
 ///
 /// ```
-/// use common::{IMUSample};
+/// use common::traits::IMUSample;
 /// use common::types::timed::SampleScalar;
 /// use common::types::untimed::Scalar;
 ///

@@ -17,7 +17,6 @@ pub trait PhyphoxPort {
     async fn start(
         &self,
         period_millis: Duration,
-        sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         window_size: Option<usize>,
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
@@ -25,4 +24,5 @@ pub trait PhyphoxPort {
 
     fn get_tag(&self) -> &str;
     async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String>;
+    fn get_sensor_cluster(&self) -> Vec<SensorType>;
 }

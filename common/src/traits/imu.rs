@@ -42,8 +42,6 @@ pub trait IMUSample: Send + Sync + Clone + Default + 'static {
 pub trait IMUReadings<T: IMUSample>: Send + Sync + Clone {
     ///   Returns the sensor tag
     fn get_sensor_tag(&self) -> &str;
-    ///   Returns a slive to samples.
-    fn get_samples_ref(&self) -> &[T];
     ///   Returns samples
     fn get_samples(&self) -> Vec<T>;
     ///   Adds new samples
@@ -74,7 +72,22 @@ where
     async fn register_listener(
         &self,
         listener: &mut dyn Notifiable<T>,
-        sensor_type: SensorType,
+        sensor_type: &SensorType,
     ) -> Result<Uuid, String>;
     async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<T>);
+}
+
+#[async_trait]
+pub trait IMUSink<T, S>: Send + Sync
+where
+    T: Send + Sync + IMUReadings<S>,
+    S: Send + Sync + IMUSample,
+{
+    async fn attach_listener(
+        &self,
+        source: &dyn IMUSource<T, S>,
+        sensor_type: &SensorType,
+    ) -> Result<Uuid, String>;
+    async fn detach_listener(&self, source: &dyn IMUSource<T, S>, id: Uuid);
+    async fn process_samples(&self, id: Uuid, samples: Arc<T>);
 }

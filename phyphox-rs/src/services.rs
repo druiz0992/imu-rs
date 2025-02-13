@@ -33,11 +33,7 @@ where
     /// Returns an ClientBuild error if Http client to connect to Phyphox API cannot be created
     pub fn new(client: C) -> Self {
         let abort_signal = Arc::new(Notify::new());
-        let sensor_cluster = vec![
-            SensorType::Accelerometer,
-            SensorType::Gyroscope,
-            SensorType::Magnetometer,
-        ];
+        let sensor_cluster = client.get_sensor_cluster();
 
         let publishers = PublisherManager::new(&sensor_cluster);
 
@@ -58,12 +54,10 @@ where
     ) -> Result<(), PhyphoxError> {
         let abort_signal = self.abort_signal.clone();
         shutdown::listen_for_shutdown(Arc::clone(&abort_signal), run_for_millis);
-        let sensor_cluster = self.publishers.get_available_publisher_types().await;
-        let publishers = self.publishers.get_publishers().await;
+        let publishers = self.publishers.get_publishers_sorted_by_index().await;
         self.client
             .start(
                 period_millis,
-                &sensor_cluster,
                 Some(self.abort_signal.clone()),
                 window_size,
                 Some(publishers),
@@ -92,7 +86,7 @@ where
     async fn register_listener(
         &self,
         listener: &mut dyn Notifiable<SensorReadings<Sample3D>>,
-        sensor_type: SensorType,
+        sensor_type: &SensorType,
     ) -> Result<Uuid, String> {
         self.publishers.add_listener(listener, sensor_type).await
     }
@@ -118,10 +112,11 @@ where
 pub fn run_service(
     base_url: &str,
     sensor_cluster_tag: &str,
+    sensor_cluster: Vec<SensorType>,
     update_period_millis: u64,
     window_size: Option<usize>,
 ) -> Result<(tokio::task::JoinHandle<()>, Arc<PhyphoxService<Phyphox>>), PhyphoxError> {
-    let phyphox = Phyphox::new(base_url, sensor_cluster_tag)?;
+    let phyphox = Phyphox::new(base_url, sensor_cluster_tag, sensor_cluster)?;
     let phyphox_service: Arc<PhyphoxService<Phyphox>> = Arc::new(PhyphoxService::new(phyphox));
 
     let handle = tokio::spawn({
@@ -151,6 +146,7 @@ pub fn run_service(
 /// An error ClientBuild is returned if http client connecting with phyphox app REST API cannot be created.
 pub fn run_mock_service(
     sensor_cluster_tag: &str,
+    sensor_cluster: Vec<SensorType>,
     update_period_millis: u64,
     capture_sampling_period_millis: u64,
     add_sensor_noise: bool,
@@ -164,6 +160,7 @@ pub fn run_mock_service(
 > {
     let phyphox = PhyphoxMock::new(
         sensor_cluster_tag,
+        sensor_cluster,
         capture_sampling_period_millis,
         add_sensor_noise,
     )?;
@@ -194,14 +191,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_phyphox_client_new() {
-        let client =
-            Phyphox::new("http://localhost", "Test").expect("Error creating Phyphox instance");
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
+        let client = Phyphox::new("http://localhost", "Test", sensor_cluster)
+            .expect("Error creating Phyphox instance");
         PhyphoxService::new(client);
     }
 
     #[tokio::test]
     async fn test_phyphox_mini_client_new() {
-        let client = PhyphoxMock::new("Test", 10, false).expect("Error creating Phyphox instance");
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
+        let client = PhyphoxMock::new("Test", sensor_cluster, 10, false)
+            .expect("Error creating Phyphox instance");
         let client_service = Arc::new(PhyphoxService::new(client));
 
         let client_service_clone = Arc::clone(&client_service);
@@ -222,8 +230,14 @@ mod tests {
         let capture_sampling_period_millis = 5;
         let add_sensor_noise = false;
         let run_for_millis = 1000;
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
         let (handle, _service) = run_mock_service(
             sensor_tag,
+            sensor_cluster,
             update_period_millis,
             capture_sampling_period_millis,
             add_sensor_noise,

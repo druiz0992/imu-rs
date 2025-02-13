@@ -37,9 +37,6 @@ impl<T: IMUSample> SensorReadings<T> {
 }
 
 impl<T: IMUSample> IMUReadings<T> for SensorReadings<T> {
-    fn get_samples_ref(&self) -> &[T] {
-        &self.buffer
-    }
     fn get_samples(&self) -> Vec<T> {
         self.buffer.clone()
     }
@@ -66,6 +63,8 @@ impl<T: IMUSample> IMUReadings<T> for SensorReadings<T> {
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
     use super::*;
     use crate::types::Sample3D;
 
@@ -77,23 +76,29 @@ mod tests {
 
     #[test]
     fn test_sensor_new() {
-        let sensor = SensorReadings::<Sample3D>::new("test_sensor", SensorType::Gyroscope);
+        let sensor =
+            SensorReadings::<Sample3D>::new("test_sensor", SensorType::Gyroscope(Uuid::new_v4()));
         assert_eq!(sensor.get_sensor_tag(), "test_sensor");
     }
 
     #[test]
     fn test_sensor_is_empty() {
-        let sensor =
-            SensorReadings::<Sample3D>::new("test_sensor", SensorType::Other("wer".to_string()));
+        let sensor = SensorReadings::<Sample3D>::new(
+            "test_sensor",
+            SensorType::Other(Uuid::new_v4(), "wer".to_string()),
+        );
         assert!(sensor.is_empty());
     }
 
     #[test]
     fn test_sensor_add_sample() {
-        let mut sensor = SensorReadings::<Sample3D>::new("test_sensor", SensorType::Accelerometer);
+        let mut sensor = SensorReadings::<Sample3D>::new(
+            "test_sensor",
+            SensorType::Accelerometer(Uuid::new_v4()),
+        );
         let sample = Sample3D::default();
         sensor.add_sample(sample.clone());
         assert_eq!(sensor.len(), 1);
-        assert_eq!(sensor.get_samples_ref()[0], sample);
+        assert_eq!(sensor.get_samples()[0], sample);
     }
 }

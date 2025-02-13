@@ -126,7 +126,7 @@ mod tests {
     fn test_unit_quaternion_from_unit_quaternion() {
         let unit_quaternion =
             nalgebra::UnitQuaternion::new_unchecked(Quaternion::new(1.0, 0.0, 0.0, 0.0));
-        let unit_quaternion_wrapper = UnitQuaternion::from_unit_quaternion(unit_quaternion.clone());
+        let unit_quaternion_wrapper = UnitQuaternion::from_unit_quaternion(unit_quaternion);
         assert_eq!(unit_quaternion_wrapper.inner(), unit_quaternion);
     }
 

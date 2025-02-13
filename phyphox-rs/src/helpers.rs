@@ -1,5 +1,8 @@
 use serde_json::Value;
+use uuid::Uuid;
 
+use common::types::sensors::sensor_type;
+use common::types::sensors::SensorType;
 use common::types::untimed::xyz::N_XYZ_COORDINATES;
 use common::types::XYZ;
 
@@ -20,11 +23,17 @@ const EPS_MEASUREMENT_TIME: f64 = 10e-5;
 
 pub(crate) fn control_str(
     sensor: usize,
-) -> Result<(&'static str, [&'static str; N_XYZ_COORDINATES]), PhyphoxError> {
+) -> Result<(&'static str, [&'static str; N_XYZ_COORDINATES], usize), PhyphoxError> {
     match sensor {
-        0 => Ok((ACC_TIME, ACC_VARIABLES)),
-        1 => Ok((GYRO_TIME, GYRO_VARIABLES)),
-        2 => Ok((MAG_TIME, MAG_VARIABLES)),
+        sensor_type::ACCELEROMETER_OFFSET..sensor_type::GYROSCOPE_OFFSET => {
+            Ok((ACC_TIME, ACC_VARIABLES, 0))
+        }
+        sensor_type::GYROSCOPE_OFFSET..sensor_type::MAGNETOMETER_OFFSET => {
+            Ok((GYRO_TIME, GYRO_VARIABLES, 1))
+        }
+        sensor_type::MAGNETOMETER_OFFSET..sensor_type::OTHER_OFFSET => {
+            Ok((MAG_TIME, MAG_VARIABLES, 2))
+        }
         _ => Err(PhyphoxError::Other(format!(
             "Sensor {} doesnt exist",
             sensor
@@ -32,7 +41,7 @@ pub(crate) fn control_str(
     }
 }
 
-pub(crate) fn update_measurement_time(data: &Vec<f64>, timestamp: &mut f64) {
+pub(crate) fn update_measurement_time(data: &[f64], timestamp: &mut f64) {
     if let Some(last_row) = data.last() {
         *timestamp = last_row + EPS_MEASUREMENT_TIME;
     }
@@ -103,14 +112,14 @@ pub(crate) fn combine_results(results: Vec<Vec<f64>>) -> (Vec<f64>, Vec<XYZ>) {
 
         if let Ok(xyz) = XYZ::try_from(values) {
             untimed_data.push(xyz);
-            timestamp.push(results[0][row].clone());
+            timestamp.push(results[0][row]);
         }
     }
     (timestamp, untimed_data)
 }
 
 pub(crate) fn build_query(variables: &[&str], time_var: &str, since: Option<f64>) -> String {
-    let mut query = format!("{}", time_var);
+    let mut query = time_var.to_string();
     if let Some(since_val) = since {
         query = format!("{}={:.4}", time_var, since_val);
     }
@@ -129,23 +138,75 @@ pub(crate) fn build_query(variables: &[&str], time_var: &str, since: Option<f64>
     query.push_str(&variable_query);
     query
 }
+
+pub(crate) fn to_type_id(sensor_type: &str, sensor_id_cluster: &[Uuid]) -> Option<String> {
+    let sensor_type = sensor_type.to_lowercase();
+
+    if sensor_type.contains("acc") {
+        Some(format!("Accelerometer::{}", sensor_id_cluster[0]))
+    } else if sensor_type.contains("gyr") {
+        Some(format!("Gyroscope::{}", sensor_id_cluster[1]))
+    } else if sensor_type.contains("mag") {
+        Some(format!("Magnetometer::{}", sensor_id_cluster[2]))
+    } else {
+        None
+    }
+}
+
+pub(crate) fn extract_uuids(sensors: &[SensorType]) -> Vec<Uuid> {
+    let mut uuids = vec![Uuid::nil(), Uuid::nil(), Uuid::nil()]; // Default with nil UUIDs
+
+    for sensor in sensors {
+        match sensor {
+            SensorType::Accelerometer(uuid) => uuids[0] = *uuid,
+            SensorType::Gyroscope(uuid) => uuids[1] = *uuid,
+            SensorType::Magnetometer(uuid) => uuids[2] = *uuid,
+            _ => {} // Ignore other sensor types (if needed)
+        }
+    }
+
+    uuids
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng;
     use serde_json::json;
 
+    fn generate_random_integer(x: usize, y: usize) -> usize {
+        let mut rng = rand::thread_rng();
+        rng.gen_range(x..y) as usize
+    }
     #[test]
     fn test_control_str() {
-        assert_eq!(control_str(0).unwrap(), (ACC_TIME, ACC_VARIABLES));
-        assert_eq!(control_str(1).unwrap(), (GYRO_TIME, GYRO_VARIABLES));
-        assert_eq!(control_str(2).unwrap(), (MAG_TIME, MAG_VARIABLES));
-        assert!(control_str(3).is_err());
+        for _ in 0..100 {
+            let idx = generate_random_integer(
+                sensor_type::ACCELEROMETER_OFFSET,
+                sensor_type::GYROSCOPE_OFFSET,
+            );
+            assert_eq!(control_str(idx).unwrap(), (ACC_TIME, ACC_VARIABLES, 0));
+
+            let idx = generate_random_integer(
+                sensor_type::GYROSCOPE_OFFSET,
+                sensor_type::MAGNETOMETER_OFFSET,
+            );
+            assert_eq!(control_str(idx).unwrap(), (GYRO_TIME, GYRO_VARIABLES, 1));
+
+            let idx = generate_random_integer(
+                sensor_type::MAGNETOMETER_OFFSET,
+                sensor_type::OTHER_OFFSET,
+            );
+            assert_eq!(control_str(idx).unwrap(), (MAG_TIME, MAG_VARIABLES, 2));
+
+            let idx = generate_random_integer(sensor_type::OTHER_OFFSET, sensor_type::MAX_OFFSET);
+            assert!(control_str(idx).is_err());
+        }
     }
 
     #[test]
     fn test_update_measurement_time() {
         let mut timestamp = 0.0;
-        update_measurement_time(&vec![1.0, 2.0, 3.0], &mut timestamp);
+        update_measurement_time(&[1.0, 2.0, 3.0], &mut timestamp);
         assert_eq!(timestamp, 3.0 + EPS_MEASUREMENT_TIME);
     }
 
@@ -156,14 +217,15 @@ mod tests {
                 "measuring": true
             }
         });
-        assert_eq!(get_status_from_json(&data).unwrap(), true);
+
+        assert!(get_status_from_json(&data).unwrap());
 
         let data = json!({
             "status": {
                 "measuring": false
             }
         });
-        assert_eq!(get_status_from_json(&data).unwrap(), false);
+        assert!(!get_status_from_json(&data).unwrap());
 
         let data = json!({});
         assert!(get_status_from_json(&data).is_err());

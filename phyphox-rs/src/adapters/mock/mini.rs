@@ -12,6 +12,7 @@ use crate::models::errors::PhyphoxError;
 use crate::ports::PhyphoxPort;
 use common::traits::{IMUReadings, IMUSample};
 use common::types::buffers::CircularReader;
+use common::types::sensors::sensor_type;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use common::types::untimed::XYZ;
@@ -33,6 +34,7 @@ pub struct PhyphoxMock {
     time_delta: GaussianNoise,
     sensor_noise: Option<GaussianNoise>,
     sensor_cluster_tag: String,
+    sensor_cluster: Vec<SensorType>,
 }
 
 impl PhyphoxMock {
@@ -40,6 +42,7 @@ impl PhyphoxMock {
     /// Returns an ClientBuild error if Http client to connect to Phyphox API cannot be created
     pub(crate) fn new(
         sensor_cluster_tag: &str,
+        sensor_cluster: Vec<SensorType>,
         capture_sampling_period_millis: u64,
         add_sensor_noise: bool,
     ) -> Result<Self, PhyphoxError> {
@@ -78,6 +81,7 @@ impl PhyphoxMock {
             time_delta: GaussianNoise::new(GAUSSIAN_TIME_MEAN, GAUSSIAN_TIME_STDEV),
             sensor_noise: add_sensor_noise
                 .then(|| GaussianNoise::new(GAUSSIAN_SENSOR_MEAN, GAUSSIAN_SENSOR_STDEV)),
+            sensor_cluster,
         })
     }
 
@@ -136,7 +140,6 @@ impl PhyphoxPort for PhyphoxMock {
     async fn start(
         &self,
         period_millis: Duration,
-        sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         _window_size: Option<usize>,
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
@@ -153,8 +156,13 @@ impl PhyphoxPort for PhyphoxMock {
                     timestamp.incr_current_timestamp(self.capture_sampling_period_secs);
                 }
 
-                for sensor in sensor_cluster {
-                    let sensor_idx = usize::from(sensor);
+                for sensor in &self.sensor_cluster {
+                    let sensor_idx = match usize::from(sensor) {
+                        sensor_type::ACCELEROMETER_OFFSET..sensor_type::GYROSCOPE_OFFSET => 0,
+                        sensor_type::GYROSCOPE_OFFSET..sensor_type::MAGNETOMETER_OFFSET => 1,
+                        sensor_type::MAGNETOMETER_OFFSET..sensor_type::MAX_OFFSET => 2,
+                        _ => 2,
+                    };
                     let samples = self.get_next_samples(sensor_idx).await;
                     let buffer = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), samples);
                     if let Some(publisher) = publisher.as_ref() {
@@ -173,32 +181,37 @@ impl PhyphoxPort for PhyphoxMock {
     }
 
     async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
-        Ok(vec![
-            SensorType::Accelerometer,
-            SensorType::Gyroscope,
-            SensorType::Magnetometer,
-        ])
+        Ok(self.sensor_cluster.clone())
+    }
+    fn get_sensor_cluster(&self) -> Vec<SensorType> {
+        self.sensor_cluster.clone()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
 
     #[tokio::test]
     async fn test_phyphox_mock_new() {
-        let phyphox_mock = PhyphoxMock::new("Test", 100, false);
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
+        let phyphox_mock = PhyphoxMock::new("Test", sensor_cluster, 100, false);
         assert!(phyphox_mock.is_ok());
     }
 
     #[tokio::test]
     async fn test_phyphox_mock_start_stop() {
-        let sensor_cluster: [SensorType; N_SENSORS] = [
-            SensorType::Accelerometer,
-            SensorType::Gyroscope,
-            SensorType::Magnetometer,
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
         ];
-        let phyphox_mock = Arc::new(PhyphoxMock::new("Test", 100, false).unwrap());
+        let phyphox_mock = Arc::new(PhyphoxMock::new("Test", sensor_cluster, 100, false).unwrap());
         let period = Duration::from_millis(100);
 
         let phyphox_mock_clone = Arc::clone(&phyphox_mock);
@@ -213,7 +226,7 @@ mod tests {
 
         let start_handle = tokio::spawn(async move {
             phyphox_mock_clone
-                .start(period, &sensor_cluster, Some(abort_signal), None, None)
+                .start(period, Some(abort_signal), None, None)
                 .await
                 .unwrap();
         });
@@ -237,7 +250,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_next_samples() {
-        let phyphox_mock = PhyphoxMock::new("Test", 100, true).unwrap();
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
+        let phyphox_mock = PhyphoxMock::new("Test", sensor_cluster, 100, true).unwrap();
         {
             let mut timestamp = phyphox_mock.timestamps.lock().await;
             timestamp.incr_current_timestamp(0.1);
