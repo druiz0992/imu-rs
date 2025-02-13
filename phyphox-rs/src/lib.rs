@@ -15,14 +15,9 @@
 //!
 //! **NOTE** Currently, `phyphox-rs` only captures data from Accelerometer, Gyroscope and Magnetometer.
 
-pub mod adapters;
+pub(crate) mod adapters;
 pub(crate) mod constants;
 mod helpers;
 pub mod models;
-pub mod ports;
+pub(crate) mod ports;
 pub mod services;
-
-#[doc(inline)]
-pub use adapters::mock::PhyphoxMock;
-#[doc(inline)]
-pub use adapters::production::Phyphox;

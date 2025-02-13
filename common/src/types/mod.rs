@@ -1,14 +1,13 @@
 pub mod buffers;
-pub mod sample_3d;
-pub mod sample_quaternion;
-pub mod sensor_readings;
-pub mod sensor_tag;
-pub mod sensor_type;
-pub mod xyz;
+pub mod callback;
+pub mod filters;
+pub mod sensors;
+pub mod timed;
+pub mod untimed;
 
-pub use sample_3d::*;
-pub use sample_quaternion::*;
-pub use sensor_readings::*;
-pub use sensor_tag::*;
-pub use sensor_type::*;
-pub use xyz::*;
+pub use crate::types::buffers::{CircularBuffer, CircularReader};
+pub use crate::types::callback::Callback;
+pub use crate::types::filters::{MovingAverage, WeightedMovingAverage};
+pub use crate::types::sensors::{SensorReadings, SensorTag, SensorType};
+pub use crate::types::timed::{Sample3D, SampleQuaternion, SampleScalar};
+pub use crate::types::untimed::{Scalar, UnitQuaternion, XYZ};

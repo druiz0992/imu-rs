@@ -1,7 +1,29 @@
 use std::collections::VecDeque;
+/// A circular buffer type, where the buffer has a constant length of `size` elements. The buffer is filled with default samples
+/// or with some initial samples given to the constructor. When a new sample is pushed to the buffer, the oldest sample is popped out.
+///
+/// # Examples
+///
+/// ```rust
+/// use common::types::CircularBuffer;
+///
+/// // Create a Circular Buffer of 10 `i32` elements
+/// let mut buffer: CircularBuffer<i32> = CircularBuffer::new(10);
+///
+/// let buffer_len = buffer.len();
+///
+/// assert_eq!(buffer_len, 10);
+///
+/// for i in 0..20 {
+///     let out = buffer.push(i);
+///     if i < 10 {
+///         assert_eq!(out, 0);
+///     } else {
+///         assert_eq!(out, i - 10);
+///     }
+/// }
+/// ```
 
-/// Circular buffer definition. Buffer has a constant length of `size` elements. Buffer is filled by default samples.
-/// When one new sample is pushed to the buffer, the oldest sample is popped out.
 #[derive(Clone, Debug)]
 pub struct CircularBuffer<T> {
     #[allow(dead_code)]
@@ -16,6 +38,12 @@ impl<T: Clone + Default> CircularBuffer<T> {
         }
     }
 
+    pub fn from_vec(data: Vec<T>) -> Self {
+        Self {
+            buffer: VecDeque::from(data),
+        }
+    }
+
     /// New element `elem` is pushed, and oldest is popped out
     pub fn push(&mut self, elem: T) -> T {
         let out = self.buffer.pop_front().unwrap_or_default();
@@ -24,13 +52,9 @@ impl<T: Clone + Default> CircularBuffer<T> {
     }
 
     /// Returns size of CircularBuffer
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.buffer.len()
-    }
-
-    /// Checks if CircularBuffer is empty
-    pub fn is_empty(&self) -> bool {
-        self.buffer.len() == 0
     }
 }
 
@@ -63,5 +87,28 @@ mod tests {
     fn test_len() {
         let buffer: CircularBuffer<i32> = CircularBuffer::new(5);
         assert_eq!(buffer.len(), 5);
+    }
+
+    #[test]
+    fn test_from_vec() {
+        let data = vec![1, 2, 3];
+        let buffer: CircularBuffer<i32> = CircularBuffer::from_vec(data.clone());
+        assert_eq!(buffer.len(), data.len());
+        assert_eq!(buffer.buffer, data.into_iter().collect::<VecDeque<_>>());
+    }
+
+    #[test]
+    fn test_push_and_pop() {
+        let mut buffer: CircularBuffer<i32> = CircularBuffer::new(3);
+        buffer.push(1);
+        buffer.push(2);
+        buffer.push(3);
+        assert_eq!(buffer.push(4), 1);
+        assert_eq!(buffer.push(5), 2);
+        assert_eq!(buffer.push(6), 3);
+        assert_eq!(
+            buffer.buffer,
+            vec![4, 5, 6].into_iter().collect::<VecDeque<_>>()
+        );
     }
 }

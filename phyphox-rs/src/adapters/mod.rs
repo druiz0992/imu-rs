@@ -1,3 +1,2 @@
-#![doc(hidden)]
-pub mod mock;
+pub(crate) mod mock;
 pub mod production;

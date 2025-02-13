@@ -1,10 +1,13 @@
+use common::types::filters::moving_average::MovingAverage;
+use common::types::filters::weighted_moving_average::WeightedMovingAverage;
 use std::sync::Arc;
 use std::{error::Error, marker::PhantomData};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use common::{IMUReadings, IMUSample, SensorType};
+use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUUntimedSample};
+use common::types::sensors::SensorType;
 use publisher::{Listener, Publishable, Publisher};
 
 use crate::utils;
@@ -24,6 +27,9 @@ pub struct Resampler<S, T>
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
+    S::Untimed: IMUUntimedSample,
+    MovingAverage<S::Untimed>: IMUFilter<S>,
+    WeightedMovingAverage<S::Untimed>: IMUFilter<S>,
 {
     buffer: Vec<Mutex<T>>,
     publisher: Vec<Publisher<T>>,
@@ -34,16 +40,51 @@ impl<S, T> Resampler<S, T>
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
+    S::Untimed: IMUUntimedSample,
+    MovingAverage<S::Untimed>: IMUFilter<S>,
+    WeightedMovingAverage<S::Untimed>: IMUFilter<S>,
 {
-    pub fn new(n_buffer: usize, tag: String) -> Self {
+    pub fn new(n_buffer: usize, tag: &str) -> Self {
         Self {
             buffer: (0..n_buffer)
-                .map(|_| Mutex::new(T::from_vec("", SensorType::Accelerometer, vec![])))
+                .map(|_| Mutex::new(T::from_vec(tag, SensorType::Accelerometer, vec![])))
                 .collect(),
             publisher: (0..n_buffer).map(|_| Publisher::new()).collect(),
             _phantom_data: PhantomData,
         }
     }
+    /*
+    pub fn request_measurements(&self, source: &dyn IMUSource, sensor_type: SensorType) {
+        // get tag
+        // let tag = source.get_cluster_tag();
+        // if source.is_sensor_available(sensor_type) {
+        // if sensor is not availabe, error
+        //  todo!();
+        // }
+        // create listener;
+        //   listeer = new listener(self.handle);
+
+        // register listener to IMUSource
+        //   let id = source.register_listener(listener, sensor_type)
+
+        // add listener id to collector
+        //   self.add_new_measurement(id, tag, sensor_type)
+        todo!();
+
+        // methds for IMUSource
+        // get_tag()
+        // get_sensors()
+        // register_listener()
+        // unrgister_listener()
+        // notify_listeners();
+
+        // method for IMUSink
+        // self.handle(uuid, arc<T>)
+        // self.add_new_measurement(id, tag, sensor_type)
+        // self.remove_measurement(id, sensor_type)
+        // self.remove_cluster(id, tag)
+    }
+    */
 
     // Registers a accelerometer/gyroscope/magentometer listener functions to be called whenever new samples are available.
     // Returns the id of the registered listener.
@@ -87,9 +128,7 @@ where
             if n_samples > 1 {
                 // apply redundant sample policy
                 cache[idx] = match resample_policy {
-                    ResamplePolicy::Averaging => {
-                        utils::compute_average(imu_samples.get_samples(), timestamp)?
-                    }
+                    ResamplePolicy::Averaging => utils::compute_average(imu_samples.get_samples())?,
                     ResamplePolicy::FirstSample => {
                         imu_samples.get_samples().get(0).cloned().unwrap()
                     }
@@ -163,14 +202,15 @@ where
 
         for sensor_buffer in buffer_clone.iter_mut() {
             let filtered_samples: Vec<S> = sensor_buffer
-                .into_iter_samples()
+                .get_samples()
+                .into_iter()
                 .filter_map(|sample| {
                     let sample_timestamp = sample.get_timestamp();
                     let sample_data = sample.get_measurement();
                     if sample_timestamp <= timestamp
                         && sample_timestamp >= timestamp - period * 10.0
                     {
-                        Some(S::from_untimed(sample_data, sample_timestamp))
+                        Some(S::from_measurement(sample_timestamp, sample_data))
                     } else {
                         None
                     }
@@ -251,15 +291,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{Sample3D, SensorReadings};
-    use publisher::{listener, Listener, Notifiable};
+    use common::traits::Notifiable;
+    use common::types::sensors::SensorReadings;
+    use common::types::timed::Sample3D;
+    use publisher::{listener, Listener};
 
     #[tokio::test]
     async fn test_callback() {
-        let resampler = Arc::new(Resampler::<Sample3D, SensorReadings<_>>::new(
-            3,
-            "test".to_string(),
-        ));
+        let resampler = Arc::new(Resampler::<Sample3D, SensorReadings<_>>::new(3, "test"));
         let listener_resampler = resampler.clone();
         let listener = Listener::new({
             move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
@@ -275,10 +314,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_callback_with_macro() {
-        let resampler = Arc::new(Resampler::<Sample3D, SensorReadings<_>>::new(
-            3,
-            "test".to_string(),
-        ));
+        let resampler = Arc::new(Resampler::<Sample3D, SensorReadings<_>>::new(3, "test"));
         let listener = listener!(resampler.handle);
 
         //let listener = listener!(resampler.handle);

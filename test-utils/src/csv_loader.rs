@@ -114,7 +114,7 @@ pub fn load_csv_columns<T: TryFrom<Vec<f64>>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::Sample3D;
+    use common::types::timed::Sample3D;
 
     #[test]
     fn test_read_csv() {

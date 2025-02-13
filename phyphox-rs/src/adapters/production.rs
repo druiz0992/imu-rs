@@ -4,7 +4,6 @@
 // via an HTTP API. It includes methods to fetch sensor data,
 // control common, and register listeners to receive for incoming data.
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,13 +11,16 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tokio::sync::Notify;
 
-use common::{IMUFilter, IMUReadings, IMUSample, SensorType, XYZ};
+use common::traits::{IMUFilter, IMUReadings, IMUSample};
+use common::types::filters::moving_average::MovingAverage;
+use common::types::sensors::{SensorReadings, SensorType};
+use common::types::timed::Sample3D;
+use common::types::untimed::XYZ;
 use publisher::{Publishable, Publisher};
 
 use crate::constants::N_SENSORS;
 use crate::helpers;
 use crate::models::errors::PhyphoxError;
-use crate::models::filter;
 use crate::models::http_client::HttpClient;
 use crate::ports::PhyphoxPort;
 
@@ -31,57 +33,32 @@ const CLEAR_CMD: &str = "clear";
 const CONFIG_CMD: &str = "/config?";
 
 /// Configures data acquisition
-pub struct Phyphox<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample,
-{
+pub struct Phyphox {
     client: HttpClient,
-    sensor_tag: String,
-    _phamtom_data_s: PhantomData<S>,
-    _phamtom_data_t: PhantomData<T>,
+    sensor_cluster_tag: String,
+    sensor_cluster: Vec<SensorType>,
 }
 
-impl<T, S> Phyphox<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample,
-{
+impl Phyphox {
     /// Creates a new `Phyphox` instance with the specified configuration.
     /// Returns an ClientBuild error if Http client to connect to Phyphox API cannot be created
-    pub fn new(base_url: &str, sensor_tag: &str) -> Result<Self, PhyphoxError> {
+    pub(crate) fn new(
+        base_url: &str,
+        sensor_cluster_tag: &str,
+        sensor_cluster: Vec<SensorType>,
+    ) -> Result<Self, PhyphoxError> {
         let client = HttpClient::new(base_url.to_string())?;
 
         Ok(Self {
             client,
-            sensor_tag: sensor_tag.to_string(),
-            _phamtom_data_s: PhantomData,
-            _phamtom_data_t: PhantomData,
+            sensor_cluster_tag: sensor_cluster_tag.to_string(),
+            sensor_cluster,
         })
     }
 
     /// Returns JSON data from the specified path or FetchData error if it couldnt retrieve data from REST API
     async fn fetch_json(&self, path: &str) -> Result<Value, PhyphoxError> {
         self.client.fetch_json(path).await
-    }
-
-    /// Returns available sensors in phyphox
-    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, PhyphoxError> {
-        let json = self.fetch_json(CONFIG_CMD).await?;
-        let mut available_sensors: Vec<SensorType> = vec![];
-
-        if let Some(exports) = json.get("export").and_then(|e| e.as_array()) {
-            available_sensors = exports
-                .iter()
-                .filter_map(|entry| {
-                    entry
-                        .get("set")
-                        .and_then(|s| s.as_str())
-                        .and_then(|s| s.try_into().ok())
-                })
-                .collect();
-        }
-        Ok(available_sensors)
     }
 
     /// Returns a tuple containing the retrieved sensor data and a flag indicating if sensor is still active
@@ -128,20 +105,15 @@ where
 }
 
 #[async_trait]
-impl<T, S> PhyphoxPort<T, S> for Phyphox<T, S>
-where
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S: IMUSample,
-{
+impl PhyphoxPort for Phyphox {
     /// Starts the data acquisition process. The process is stopped with a SIGINT signal
     /// Returns FetchData error if it can't connect to REST API.
     async fn start(
         &self,
         period_millis: Duration,
-        sensor_cluster: &[SensorType],
         abort_signal: Option<Arc<Notify>>,
         window_size: Option<usize>,
-        publisher: Option<[Publisher<T>; N_SENSORS]>,
+        publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
         self.clear_cmd().await?;
         self.start_cmd().await?;
@@ -150,12 +122,15 @@ where
 
         log::info!("Fetching data...");
 
-        let mut ma_filters: Vec<Option<filter::MovingAverage<XYZ>>> = window_size
+        let mut ma_filters: Vec<Option<MovingAverage<XYZ>>> = window_size
             .map_or(vec![None; N_SENSORS], |w_size| {
-                vec![Some(filter::MovingAverage::new(w_size)); N_SENSORS]
+                vec![Some(MovingAverage::new(w_size)); N_SENSORS]
             });
 
-        let active_sensor = self.get_available_sensors().await?;
+        let active_sensor = self
+            .get_available_sensors()
+            .await
+            .map_err(|e| PhyphoxError::Other(e.to_string()))?;
 
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
 
@@ -166,12 +141,12 @@ where
                 }
 
                 _ = tokio::time::sleep(period_millis) => {
-                    for sensor in sensor_cluster {
-                        if !active_sensor.contains(&sensor) {
+                    for sensor in &self.sensor_cluster {
+                        if !active_sensor.contains(sensor) {
                             continue;
                         }
                         let sensor_idx = usize::from(sensor);
-                        let (time_str, variables) = helpers::control_str(sensor_idx)?;
+                        let (time_str, variables, sensor_idx) = helpers::control_str(sensor_idx)?;
                         let (timestamp_info, untimed_data_info,  is_measuring) = match self
                             .get_data(time_str, Some(last_time[sensor_idx]), &variables)
                             .await {
@@ -189,21 +164,19 @@ where
 
                         helpers::update_measurement_time(&timestamp_info, &mut last_time[sensor_idx]);
 
-                        let filtered_untimed_data = match ma_filters[sensor_idx].as_mut() {
-                            Some(ma_filter) => ma_filter.filter(untimed_data_info),
-                            None => untimed_data_info, // No need to clone here
+                        let timed_samples: Vec<Sample3D> = timestamp_info.into_iter().zip(untimed_data_info.into_iter()).map(|(t, s)| Sample3D::from_measurement(t, s)).collect();
+                        let filtered_data = match ma_filters[sensor_idx].as_mut() {
+                            Some(ma_filter) => ma_filter.filter_batch(timed_samples),
+                            None => Ok(timed_samples)
                         };
 
-                        let filtered_data = timestamp_info
-                            .into_iter()
-                            .zip(filtered_untimed_data.into_iter())
-                            .map(|(t, s)| S::from_untimed(s.inner().to_vec(), t))
-                            .collect();
-                        let buffer  = T::from_vec(&self.sensor_tag, sensor.clone(), filtered_data);
+                        if let Ok(filtered_data) = filtered_data {
+                            let buffer  = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), filtered_data);
 
-                        if let Some(publisher) = publisher.as_ref() {
-                            publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await
-                        };
+                            if let Some(publisher) = publisher.as_ref() {
+                                publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await
+                            };
+                        }
 
                     }
                 }
@@ -213,24 +186,65 @@ where
         self.stop_cmd().await?;
         Ok(())
     }
+    fn get_tag(&self) -> &str {
+        self.sensor_cluster_tag.as_str()
+    }
+
+    /// Returns available sensors in phyphox
+    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
+        let json = self
+            .fetch_json(CONFIG_CMD)
+            .await
+            .map_err(|_| "Error retrieving available sensors".to_string())?;
+        let mut available_sensors: Vec<SensorType> = vec![];
+
+        let sensor_uuids = helpers::extract_uuids(&self.sensor_cluster);
+
+        if let Some(exports) = json.get("export").and_then(|e| e.as_array()) {
+            available_sensors = exports
+                .iter()
+                .filter_map(|entry| {
+                    entry
+                        .get("set")
+                        .and_then(|s| s.as_str())
+                        .and_then(|s| helpers::to_type_id(s, &sensor_uuids))
+                        .and_then(|s| s.try_into().ok())
+                })
+                .collect();
+        }
+        Ok(available_sensors)
+    }
+    fn get_sensor_cluster(&self) -> Vec<SensorType> {
+        self.sensor_cluster.clone()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{Sample3D, SensorReadings};
+    use uuid::Uuid;
     use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
     async fn test_phyphox_new() {
-        Phyphox::<SensorReadings<Sample3D>, _>::new("http://localhost", "Test")
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
+        Phyphox::new("http://localhost", "Test", sensor_cluster)
             .expect("Error creating Phyphox instance");
     }
 
     #[tokio::test]
     async fn test_phyphox_fetch_json() {
         let mock_server = MockServer::start().await;
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
 
         Mock::given(method("GET"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -239,9 +253,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let phyphox =
-            Phyphox::<SensorReadings<Sample3D>, _>::new(mock_server.uri().as_str(), "Test")
-                .unwrap();
+        let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test", sensor_cluster).unwrap();
 
         let result = phyphox.fetch_json("/get?test").await.unwrap();
         assert_eq!(result["key"], "value");
@@ -250,6 +262,11 @@ mod tests {
     #[tokio::test]
     async fn test_phyphox_control() {
         let mock_server = MockServer::start().await;
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
 
         Mock::given(method("GET"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -261,9 +278,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let phyphox =
-            Phyphox::<SensorReadings<Sample3D>, _>::new(mock_server.uri().as_str(), "Test")
-                .unwrap();
+        let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test", sensor_cluster).unwrap();
 
         let result = phyphox.clear_cmd().await;
         assert!(result.is_ok());
@@ -272,6 +287,11 @@ mod tests {
     #[tokio::test]
     async fn test_phyphox_get_data() {
         let mock_server = MockServer::start().await;
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
 
         Mock::given(method("GET"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -288,9 +308,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let phyphox =
-            Phyphox::<SensorReadings<Sample3D>, _>::new(mock_server.uri().as_str(), "Test")
-                .unwrap();
+        let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test", sensor_cluster).unwrap();
 
         let (_timestamps, data, is_measuring) = phyphox
             .get_data("acc_time", Some(0.0), &["accX", "accY", "accZ"])
@@ -300,8 +318,8 @@ mod tests {
         assert_eq!(
             data,
             vec![
-                XYZ::from_vec(vec![1.0, 3.0, 5.0]).unwrap(),
-                XYZ::from_vec(vec![2.0, 4.0, 6.0]).unwrap()
+                XYZ::try_from(vec![1.0, 3.0, 5.0]).unwrap(),
+                XYZ::try_from(vec![2.0, 4.0, 6.0]).unwrap()
             ]
         );
         assert!(is_measuring);
@@ -310,6 +328,11 @@ mod tests {
     #[tokio::test]
     async fn test_phyphox_get_incomplete_data() {
         let mock_server = MockServer::start().await;
+        let sensor_cluster = vec![
+            SensorType::Accelerometer(Uuid::new_v4()),
+            SensorType::Gyroscope(Uuid::new_v4()),
+            SensorType::Magnetometer(Uuid::new_v4()),
+        ];
 
         Mock::given(method("GET"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -326,20 +349,14 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let phyphox =
-            Phyphox::<SensorReadings<Sample3D>, _>::new(mock_server.uri().as_str(), "Test")
-                .unwrap();
+        let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test", sensor_cluster).unwrap();
 
         let (_timestamps, data, is_measuring) = phyphox
             .get_data("acc_time", Some(0.0), &["accX", "accY", "accZ"])
             .await
             .unwrap();
 
-        assert_eq!(data, vec![XYZ::from_vec(vec![1.0, 3.0, 5.0]).unwrap(),]);
+        assert_eq!(data, vec![XYZ::try_from(vec![1.0, 3.0, 5.0]).unwrap(),]);
         assert!(is_measuring);
-    }
-
-    struct MockPhyphox {
-        // Add any necessary fields for the mock
     }
 }
