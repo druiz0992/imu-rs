@@ -9,7 +9,9 @@ log.workspace = true
 env_logger.workspace = true
 uuid.workspace = true
 async-trait.workspace = true
+dashmap.workspace = true
 
 publisher = { path = "../publisher"}
 phyphox_rs = { path = "../phyphox-rs"}
 common = { path = "../common"}
+test_utils = { path = "../test-utils"}

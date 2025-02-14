@@ -1,71 +1,26 @@
-use async_trait::async_trait;
 use phyphox_rs::services;
 use publisher::Listener;
 use std::collections::HashMap;
 use std::{sync::Arc, time::Duration};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
 use common::types::sensors::sensor_type;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
-use publisher::listener;
+use test_utils::sink_mock::SinkMock;
 
-#[derive(Debug, Clone)]
-struct SinkMock {
-    control: Arc<RwLock<HashMap<Uuid, SensorType>>>,
-}
-
-impl SinkMock {
-    fn new() -> Self {
-        Self {
-            control: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-}
-
-#[async_trait]
-impl IMUSink<SensorReadings<Sample3D>, Sample3D> for SinkMock {
-    async fn attach_listener(
-        &self,
-        source: &dyn IMUSource<SensorReadings<Sample3D>, Sample3D>,
-        sensor_type: &SensorType,
-    ) -> Result<Uuid, String> {
-        let mut listener = listener!(self.process_samples);
-        match source.register_listener(&mut listener, sensor_type).await {
-            Ok(id) => {
-                let mut control = self.control.write().await;
-                control.insert(id, sensor_type.clone());
-                Ok(id)
-            }
-            Err(e) => Err(e),
-        }
-    }
-    async fn detach_listener(
-        &self,
-        source: &dyn IMUSource<SensorReadings<Sample3D>, Sample3D>,
-        id: Uuid,
-    ) {
-        source.unregister_listener(id).await;
-        let mut control = self.control.write().await;
-        control.remove_entry(&id);
-    }
-
-    async fn process_samples(&self, id: Uuid, samples: Arc<SensorReadings<Sample3D>>) {
-        let control = self.control.read().await;
-        if let Some(sensor_type) = control.get(&id) {
-            assert!(sensor_type == &samples.get_sensor_type());
-            assert!(!matches!(sensor_type, SensorType::Gyroscope(_)));
-            assert!(
-                !matches!(samples.get_sensor_type(), SensorType::Other(_, _)),
-                "Unexpected SensorType::Other"
-            );
-            if usize::from(sensor_type) < sensor_type::MAGNETOMETER_OFFSET {
-                for sample in samples.get_samples() {
-                    assert!(sample.get_timestamp() < 3.0);
-                }
-            }
+fn process_samples(sensor_type: SensorType, samples: Arc<SensorReadings<Sample3D>>) {
+    assert!(sensor_type == samples.get_sensor_type());
+    assert!(!matches!(sensor_type, SensorType::Gyroscope(_)));
+    assert!(
+        !matches!(samples.get_sensor_type(), SensorType::Other(_, _)),
+        "Unexpected SensorType::Other"
+    );
+    if usize::from(sensor_type) < sensor_type::MAGNETOMETER_OFFSET {
+        for sample in samples.get_samples() {
+            assert!(sample.get_timestamp() < 3.0);
         }
     }
 }
@@ -301,7 +256,9 @@ async fn test_sink() {
     )
     .unwrap();
 
-    let sink = SinkMock::new();
+    let mut sink = SinkMock::new();
+    sink.register_callback(process_samples);
+
     let id_accel = sink
         .attach_listener(&*phyphox, &SensorType::Accelerometer(acc_id))
         .await

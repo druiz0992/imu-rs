@@ -126,6 +126,7 @@ fn select_random_pending_samples() -> usize {
         .unwrap()
         .as_micros();
     let lsb: u8 = now.to_le_bytes()[0];
+
     if lsb & LSB_TIME_MASK == 0 {
         0
     } else {

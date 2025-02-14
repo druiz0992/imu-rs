@@ -14,12 +14,12 @@ use std::marker::PhantomData;
 /// # Example
 ///
 /// ```rust
-/// use common::types::filters::WeightedMovingAverage;
+/// use common::types::filters::WeightedAverage;
 /// use common::traits::IMUFilter;
 /// use common::types::timed::Sample3D;
 ///
 /// // define filter with midpoint at timestamp 5.0
-/// let mut filter = WeightedMovingAverage::new(5.0);
+/// let mut filter = WeightedAverage::new(5.0);
 ///
 /// // Create two samples, one with timesamp 1.0, and the other with timestamp 6.0
 /// let samples = vec![Sample3D::new(1.0, [1.0, 2.0, 3.0]), Sample3D::new(6.0, [4.3, 3.2, 4.3])];
@@ -34,12 +34,12 @@ const WEIGHTED_AVERAGE_ALPHA: f64 = 0.8;
 
 /// Definition of moving average filter, containing `window_size` elements to do the smoothing.
 #[derive(Clone, Debug)]
-pub struct WeightedMovingAverage<T> {
+pub struct WeightedAverage<T> {
     mid_point: f64,
     _phantom_data: PhantomData<T>,
 }
 
-impl<T> WeightedMovingAverage<T> {
+impl<T> WeightedAverage<T> {
     /// Initializes new `MovingAverage` filter with `window_size` elements.
     pub fn new(mid_point: f64) -> Self {
         Self {
@@ -50,7 +50,7 @@ impl<T> WeightedMovingAverage<T> {
 }
 
 /// General implementation of IMUFIlter for samples that implement `BasicArithmetic` trait
-impl<T, U> IMUFilter<U> for WeightedMovingAverage<T>
+impl<T, U> IMUFilter<U> for WeightedAverage<T>
 where
     T: IMUUntimedSample + BasicArithmetic + Default + Send + Sync + 'static + Clone + Sized,
     U: IMUSample<Untimed = T>,
@@ -78,7 +78,7 @@ where
 }
 
 /// Specific implementation of IMUFIlter for quaternion samples
-impl IMUFilter<SampleQuaternion> for WeightedMovingAverage<UnitQuaternion>
+impl IMUFilter<SampleQuaternion> for WeightedAverage<UnitQuaternion>
 where
     SampleQuaternion: Sized,
 {
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn test_weighted_moving_average_single_sample() {
-        let mut filter = WeightedMovingAverage::new(5.0);
+        let mut filter = WeightedAverage::new(5.0);
         let samples = vec![Sample3D::new(5.0, [1.0, 2.0, 3.0])];
         let smoothed_samples = filter.filter_batch(samples).unwrap();
         assert_eq!(smoothed_samples.len(), 1);
@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn test_weighted_moving_average_multiple_samples() {
         let eps = 1e-2;
-        let mut filter = WeightedMovingAverage::new(5.0);
+        let mut filter = WeightedAverage::new(5.0);
         let samples = vec![
             Sample3D::new(1.0, [1.0, 2.0, 3.0]),
             Sample3D::new(6.0, [4.0, 5.0, 6.0]),
@@ -144,14 +144,14 @@ mod tests {
     #[test]
     #[should_panic(expected = "No samples to filter")]
     fn test_weighted_moving_average_no_samples() {
-        let mut filter = WeightedMovingAverage::new(5.0);
+        let mut filter = WeightedAverage::new(5.0);
         let samples: Vec<Sample3D> = Vec::new();
         filter.filter_batch(samples).unwrap();
     }
 
     #[test]
     fn test_weighted_moving_average_quaternion_samples() {
-        let mut filter = WeightedMovingAverage::new(5.0);
+        let mut filter = WeightedAverage::new(5.0);
         let samples = vec![
             SampleQuaternion::from_unit_quaternion(1.0, UnitQuaternion::default()),
             SampleQuaternion::from_unit_quaternion(

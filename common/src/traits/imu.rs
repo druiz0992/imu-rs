@@ -89,6 +89,9 @@ where
         source: &dyn IMUSource<T, S>,
         sensor_type: &SensorType,
     ) -> Result<Uuid, String>;
-    async fn detach_listener(&self, source: &dyn IMUSource<T, S>, id: Uuid);
+    async fn detach_listener(&self, source: &dyn IMUSource<T, S>, id: Uuid) {
+        source.unregister_listener(id).await;
+    }
+
     async fn process_samples(&self, listener_id: Uuid, samples: Arc<T>);
 }
