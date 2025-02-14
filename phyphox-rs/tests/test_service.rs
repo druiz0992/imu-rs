@@ -9,18 +9,25 @@ use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
 use common::types::sensors::sensor_type;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
-use test_utils::sink_mock::SinkMock;
+use common::types::Clock;
+use test_utils::sink_mock::{MockValue, SinkMock};
 
-fn process_samples(sensor_type: SensorType, samples: Arc<SensorReadings<Sample3D>>) {
+fn process_samples(
+    value: MockValue,
+    sensor_type: SensorType,
+    samples: Arc<SensorReadings<Sample3D>>,
+) {
     assert!(sensor_type == samples.get_sensor_type());
     assert!(!matches!(sensor_type, SensorType::Gyroscope(_)));
     assert!(
         !matches!(samples.get_sensor_type(), SensorType::Other(_, _)),
         "Unexpected SensorType::Other"
     );
-    if usize::from(sensor_type) < sensor_type::MAGNETOMETER_OFFSET {
-        for sample in samples.get_samples() {
-            assert!(sample.get_timestamp() < 3.0);
+    if let MockValue::Float(timestamp_at_boot) = value {
+        if usize::from(sensor_type) < sensor_type::MAGNETOMETER_OFFSET {
+            for sample in samples.get_samples() {
+                assert!(sample.get_timestamp() < timestamp_at_boot + 3.0);
+            }
         }
     }
 }
@@ -181,6 +188,7 @@ async fn test_stop_receiving_accelerometer_samples() {
         SensorType::Gyroscope(gyro_id),
         SensorType::Magnetometer(mag_id),
     ];
+    let timestamp_at_boot = Clock::now().as_f64();
 
     // Start phyphox mock service
     let (handle, phyphox) = services::run_mock_service(
@@ -225,7 +233,7 @@ async fn test_stop_receiving_accelerometer_samples() {
     assert!(!samples.is_empty());
     for sample in samples {
         let timestamp = sample.get_timestamp();
-        assert!(timestamp < 3.0);
+        assert!(timestamp < 3.0 + timestamp_at_boot);
     }
 }
 
@@ -257,6 +265,7 @@ async fn test_sink() {
     .unwrap();
 
     let mut sink = SinkMock::new();
+    sink.set_value(MockValue::Float(Clock::now().as_f64()));
     sink.register_callback(process_samples);
 
     let id_accel = sink

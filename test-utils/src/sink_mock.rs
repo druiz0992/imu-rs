@@ -11,11 +11,25 @@ use publisher::listener;
 use publisher::Listener;
 
 type MockCallback =
-    Arc<Option<Arc<dyn Fn(SensorType, Arc<SensorReadings<Sample3D>>) + Send + Sync>>>;
+    Arc<Option<Arc<dyn Fn(MockValue, SensorType, Arc<SensorReadings<Sample3D>>) + Send + Sync>>>;
+
+#[derive(Clone)]
+pub enum MockValue {
+    Int(i64),
+    Float(f64),
+    Text(String),
+}
+
+impl Default for MockValue {
+    fn default() -> Self {
+        MockValue::Int(0)
+    }
+}
 #[derive(Clone, Default)]
 pub struct SinkMock {
     control: Arc<RwLock<HashMap<Uuid, SensorType>>>,
     callback: MockCallback,
+    value: MockValue,
 }
 
 impl SinkMock {
@@ -23,14 +37,19 @@ impl SinkMock {
         Self {
             control: Arc::new(RwLock::new(HashMap::new())),
             callback: Arc::new(None),
+            value: MockValue::default(),
         }
     }
 
     pub fn register_callback<F>(&mut self, callback: F)
     where
-        F: Fn(SensorType, Arc<SensorReadings<Sample3D>>) + Send + Sync + 'static,
+        F: Fn(MockValue, SensorType, Arc<SensorReadings<Sample3D>>) + Send + Sync + 'static,
     {
         self.callback = Arc::new(Some(Arc::new(callback)));
+    }
+
+    pub fn set_value(&mut self, value: MockValue) {
+        self.value = value;
     }
 }
 
@@ -65,7 +84,7 @@ impl IMUSink<SensorReadings<Sample3D>, Sample3D> for SinkMock {
         let control = self.control.read().await;
         if let Some(sensor_type) = control.get(&id) {
             if let Some(cb) = self.callback.as_ref() {
-                cb(sensor_type.clone(), samples);
+                cb(self.value.clone(), sensor_type.clone(), samples);
             }
         }
     }

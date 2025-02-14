@@ -16,6 +16,7 @@ use common::types::filters::moving_average::MovingAverage;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use common::types::untimed::XYZ;
+use common::types::Clock;
 use publisher::{Publishable, Publisher};
 
 use crate::constants::N_SENSORS;
@@ -68,6 +69,7 @@ impl Phyphox {
     async fn get_data(
         &self,
         time_var: &str,
+        timestamp_at_boot: f64,
         since: Option<f64>,
         variables: &[&str],
     ) -> Result<(Vec<f64>, Vec<XYZ>, bool), PhyphoxError> {
@@ -75,7 +77,7 @@ impl Phyphox {
         let data = self.fetch_json(&format!("{GET_CMD}{}", query)).await?;
         let status = helpers::get_status_from_json(&data)?;
         let results = helpers::parse_results(&data, variables, time_var)?;
-        let (timestamp, untimed_data) = helpers::combine_results(results);
+        let (timestamp, untimed_data) = helpers::combine_results(results, timestamp_at_boot);
 
         Ok((timestamp, untimed_data, status))
     }
@@ -115,6 +117,7 @@ impl PhyphoxPort for Phyphox {
         window_size: Option<usize>,
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
+        let timestamp_at_boot = Clock::now().as_f64();
         self.clear_cmd().await?;
         self.start_cmd().await?;
 
@@ -148,7 +151,7 @@ impl PhyphoxPort for Phyphox {
                         let sensor_idx = usize::from(sensor);
                         let (time_str, variables, sensor_idx) = helpers::control_str(sensor_idx)?;
                         let (timestamp_info, untimed_data_info,  is_measuring) = match self
-                            .get_data(time_str, Some(last_time[sensor_idx]), &variables)
+                            .get_data(time_str, timestamp_at_boot, Some(last_time[sensor_idx]), &variables)
                             .await {
                                 Ok(result) => result,
                                 Err(e) => {
@@ -311,7 +314,7 @@ mod tests {
         let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test", sensor_cluster).unwrap();
 
         let (_timestamps, data, is_measuring) = phyphox
-            .get_data("acc_time", Some(0.0), &["accX", "accY", "accZ"])
+            .get_data("acc_time", 0.0, Some(0.0), &["accX", "accY", "accZ"])
             .await
             .unwrap();
 
@@ -352,7 +355,7 @@ mod tests {
         let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test", sensor_cluster).unwrap();
 
         let (_timestamps, data, is_measuring) = phyphox
-            .get_data("acc_time", Some(0.0), &["accX", "accY", "accZ"])
+            .get_data("acc_time", 0.0, Some(0.0), &["accX", "accY", "accZ"])
             .await
             .unwrap();
 

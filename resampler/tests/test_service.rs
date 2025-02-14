@@ -7,10 +7,14 @@ use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use phyphox_rs::services;
 use resampler_rs::ResamplePolicy;
-use test_utils::sink_mock::SinkMock;
+use test_utils::sink_mock::{MockValue, SinkMock};
 use tokio::time::Duration;
 
-fn process_samples(sensor_type: SensorType, samples: Arc<SensorReadings<Sample3D>>) {
+fn process_samples(
+    _value: MockValue,
+    sensor_type: SensorType,
+    samples: Arc<SensorReadings<Sample3D>>,
+) {
     assert_eq!(sensor_type, samples.get_sensor_type());
     assert!(!matches!(sensor_type, SensorType::Gyroscope(_)));
     assert!(

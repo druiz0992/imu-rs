@@ -13,6 +13,7 @@ use tokio::time::{sleep, Duration};
 use crate::utils;
 use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSource, IMUUntimedSample};
 use common::types::sensors::SensorType;
+use common::types::Clock;
 use publisher::PublisherManager;
 
 const MIN_RESAMPLING_PERIOD_MILLIS: u64 = 5;
@@ -115,7 +116,6 @@ where
         }
         let resampling_policy = resampling_policy.unwrap_or_default();
         let resampling_duration_millis = Duration::from_millis(resampling_period_millis);
-        let mut next_resampling_timestamp = resampling_duration_millis.as_secs_f64();
         let mut cache = HashMap::<SensorType, S>::new();
         for sensor_type in self.sensor_cluster.iter() {
             cache.insert(sensor_type.clone(), S::default());
@@ -125,12 +125,10 @@ where
 
         loop {
             sleep(resampling_duration_millis).await;
+            let timestamp_now = Clock::now().as_f64();
 
             let raw_samples = self
-                .samples_till_timestamp(
-                    next_resampling_timestamp,
-                    resampling_duration_millis.as_secs_f64(),
-                )
+                .samples_till_timestamp(timestamp_now, resampling_duration_millis.as_secs_f64())
                 .await;
 
             let processed_samples = self
@@ -138,14 +136,12 @@ where
                     raw_samples,
                     &resampling_policy,
                     resampling_duration_millis.as_secs_f64(),
-                    next_resampling_timestamp,
+                    timestamp_now,
                     &mut cache,
                 )
                 .await;
 
             self.notify(processed_samples).await;
-
-            next_resampling_timestamp += resampling_duration_millis.as_secs_f64();
         }
     }
 }
