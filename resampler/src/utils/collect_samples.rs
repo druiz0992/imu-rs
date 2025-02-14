@@ -1,8 +1,11 @@
 use common::traits::{IMUReadings, IMUSample, IMUUntimedSample};
 const SAMPLES_TILL_TIMESTAMP_SAFEGUARD_FACTOR: f64 = 2.0;
 
-pub(crate) async fn collect_samples<T, S>(sensor_buffer: &mut T, timestamp: f64, period: f64)
-where
+pub(crate) async fn collect_samples<T, S>(
+    sensor_buffer: &mut T,
+    timestamp_now_secs: f64,
+    period_secs: f64,
+) where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
     S::Untimed: IMUUntimedSample,
@@ -12,8 +15,9 @@ where
         .into_iter()
         .filter_map(|sample| {
             let sample_timestamp = sample.get_timestamp();
-            if sample_timestamp <= timestamp
-                && sample_timestamp >= timestamp - period * SAMPLES_TILL_TIMESTAMP_SAFEGUARD_FACTOR
+            if sample_timestamp <= timestamp_now_secs
+                && sample_timestamp
+                    >= timestamp_now_secs - period_secs * SAMPLES_TILL_TIMESTAMP_SAFEGUARD_FACTOR
             {
                 Some(sample)
             } else {
@@ -28,7 +32,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Resampler;
+    use crate::ResamplerPipeline;
     use common::traits::IMUReadings;
     use common::types::sensors::{SensorReadings, SensorType};
     use common::types::timed::Sample3D;
@@ -38,9 +42,10 @@ mod tests {
     async fn test_samples_till_timestamp_no_samples() {
         let acc_id = Uuid::new_v4();
         let sensor_cluster = vec![SensorType::Accelerometer(acc_id)];
-        let resampler = Resampler::<SensorReadings<Sample3D>, _>::new("test", sensor_cluster);
+        let pipeline =
+            ResamplerPipeline::<SensorReadings<Sample3D>, _>::new("test", sensor_cluster);
 
-        let samples = resampler.samples_till_timestamp(1000.0, 100.0).await;
+        let samples = pipeline.collect_samples_till_timestamp(1000.0, 100.0).await;
         assert!(samples[0].get_samples().is_empty());
     }
 

@@ -188,7 +188,7 @@ async fn test_stop_receiving_accelerometer_samples() {
         SensorType::Gyroscope(gyro_id),
         SensorType::Magnetometer(mag_id),
     ];
-    let timestamp_at_boot = Clock::now().as_f64();
+    let timestamp_at_boot = Clock::now().as_secs();
 
     // Start phyphox mock service
     let (handle, phyphox) = services::run_mock_service(
@@ -265,7 +265,7 @@ async fn test_sink() {
     .unwrap();
 
     let mut sink = SinkMock::new();
-    sink.set_value(MockValue::Float(Clock::now().as_f64()));
+    sink.set_value(MockValue::Float(Clock::now().as_secs()));
     sink.register_callback(process_samples);
 
     let id_accel = sink

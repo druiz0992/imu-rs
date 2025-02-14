@@ -1,34 +1,29 @@
+pub(crate) mod interpolator;
+pub(crate) mod resampler;
 pub mod sink;
 pub mod source;
+
+pub(crate) use resampler::Resampler;
 
 use common::types::filters::Average;
 use common::types::filters::WeightedAverage;
 use dashmap::DashMap;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::{error::Error, marker::PhantomData};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 
 use crate::utils;
+use crate::ResamplePolicy;
 use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSource, IMUUntimedSample};
 use common::types::sensors::SensorType;
 use common::types::Clock;
 use publisher::PublisherManager;
 
-const MIN_RESAMPLING_PERIOD_MILLIS: u64 = 5;
-
-#[derive(Default, Clone)]
-pub enum ResamplePolicy {
-    Averaging,
-    FirstSample,
-    LastSample,
-    #[default]
-    WeightedAverage,
-}
+const MIN_RESAMPLING_PERIOD_MILLIS: f64 = 5.0;
 
 #[derive(Clone)]
-pub struct Resampler<T, S>
+pub struct ResamplerPipeline<T, S>
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
@@ -43,7 +38,7 @@ where
     _phantom_data: PhantomData<S>,
 }
 
-impl<T, S> Resampler<T, S>
+impl<T, S> ResamplerPipeline<T, S>
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
@@ -67,31 +62,27 @@ where
 
     async fn apply_resampling_policies(
         &self,
+        resampler: &mut Resampler<S>,
         samples: Vec<T>,
-        resample_policy: &ResamplePolicy,
-        resampling_period_millis: f64,
-        timestamp: f64,
-        cache: &mut HashMap<SensorType, S>,
+        timestamp_now_secs: f64,
     ) -> Vec<(SensorType, S)> {
         let mut resampled_buffer: Vec<_> = Vec::with_capacity(self.sensor_cluster.len());
         for imu_samples in samples.into_iter() {
-            let resampled_samples = utils::resample(
-                &imu_samples,
-                timestamp,
-                cache,
-                resample_policy,
-                resampling_period_millis,
-            );
+            let resampled_samples = resampler.resample(&imu_samples, timestamp_now_secs);
             resampled_buffer.push((imu_samples.get_sensor_type(), resampled_samples));
         }
         resampled_buffer
     }
 
-    pub async fn samples_till_timestamp(&self, timestamp: f64, period: f64) -> Vec<T> {
+    pub async fn collect_samples_till_timestamp(
+        &self,
+        timestamp_now_secs: f64,
+        period_secs: f64,
+    ) -> Vec<T> {
         let mut buffer_clone = utils::clone_and_clear(self.buffer.clone()).await;
         // Apply the filtering logic using the helper function
         for sensor_buffer in buffer_clone.iter_mut() {
-            utils::collect_samples(sensor_buffer, timestamp, period).await;
+            utils::collect_samples(sensor_buffer, timestamp_now_secs, period_secs).await;
         }
 
         buffer_clone
@@ -106,39 +97,33 @@ where
 
     pub async fn start(
         &self,
-        resampling_period_millis: u64,
-        resampling_policy: Option<ResamplePolicy>,
+        resample_policy: ResamplePolicy,
+        resampling_period_millis: f64,
     ) -> Result<(), Box<dyn Error>> {
-        if resampling_period_millis < MIN_RESAMPLING_PERIOD_MILLIS {
-            return Err(Box::<dyn Error>::from(format!(
-                "Resampling period needs to be larger than {MIN_RESAMPLING_PERIOD_MILLIS}"
-            )));
-        }
-        let resampling_policy = resampling_policy.unwrap_or_default();
-        let resampling_duration_millis = Duration::from_millis(resampling_period_millis);
-        let mut cache = HashMap::<SensorType, S>::new();
-        for sensor_type in self.sensor_cluster.iter() {
-            cache.insert(sensor_type.clone(), S::default());
-        }
+        let resampling_period_millis =
+            f64::min(resampling_period_millis, MIN_RESAMPLING_PERIOD_MILLIS);
+        let mut resampler = Resampler::<S>::new(
+            &self.sensor_cluster,
+            resample_policy,
+            resampling_period_millis,
+        );
+        let resampling_duration_secs = Duration::from_secs_f64(resampling_period_millis * 1000.0);
 
-        sleep(resampling_duration_millis).await;
+        sleep(resampling_duration_secs).await;
 
         loop {
-            sleep(resampling_duration_millis).await;
-            let timestamp_now = Clock::now().as_f64();
+            sleep(resampling_duration_secs).await;
+            let timestamp_now_secs = Clock::now().as_secs();
 
             let raw_samples = self
-                .samples_till_timestamp(timestamp_now, resampling_duration_millis.as_secs_f64())
+                .collect_samples_till_timestamp(
+                    timestamp_now_secs,
+                    resampling_duration_secs.as_secs_f64(),
+                )
                 .await;
 
             let processed_samples = self
-                .apply_resampling_policies(
-                    raw_samples,
-                    &resampling_policy,
-                    resampling_duration_millis.as_secs_f64(),
-                    timestamp_now,
-                    &mut cache,
-                )
+                .apply_resampling_policies(&mut resampler, raw_samples, timestamp_now_secs)
                 .await;
 
             self.notify(processed_samples).await;
@@ -164,12 +149,12 @@ mod tests {
             SensorType::Gyroscope(Uuid::new_v4()),
             SensorType::Magnetometer(Uuid::new_v4()),
         ];
-        let resampler = Arc::new(Resampler::<SensorReadings<Sample3D>, _>::new(
+        let pipeline = Arc::new(ResamplerPipeline::<SensorReadings<Sample3D>, _>::new(
             "test",
             sensor_cluster,
         ));
 
-        let listener_resampler = resampler.clone();
+        let listener_resampler = pipeline.clone();
         let listener = Listener::new({
             move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
                 let resampler = listener_resampler.clone();
@@ -178,7 +163,7 @@ mod tests {
         });
 
         let callback = listener.get_callback();
-        let buffer = resampler
+        let buffer = pipeline
             .buffer
             .get(&SensorType::Accelerometer(acc_id))
             .unwrap();
@@ -196,15 +181,15 @@ mod tests {
             SensorType::Gyroscope(Uuid::new_v4()),
             SensorType::Magnetometer(Uuid::new_v4()),
         ];
-        let resampler = Arc::new(Resampler::<SensorReadings<Sample3D>, _>::new(
+        let pipeline = Arc::new(ResamplerPipeline::<SensorReadings<Sample3D>, _>::new(
             "test",
             sensor_cluster,
         ));
-        let listener = listener!(resampler.process_samples);
+        let listener = listener!(pipeline.process_samples);
 
         //let listener = listener!(resampler.handle);
         let callback = listener.get_callback();
-        let buffer = resampler
+        let buffer = pipeline
             .buffer
             .get(&SensorType::Accelerometer(acc_id))
             .unwrap();

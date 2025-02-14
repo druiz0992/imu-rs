@@ -147,7 +147,7 @@ impl PhyphoxPort for PhyphoxMock {
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
-        let timestamp_at_boot = Clock::now().as_f64();
+        let timestamp_at_boot = Clock::now().as_secs();
         loop {
             tokio::select! {
                     _ = abort_signal.notified() => {

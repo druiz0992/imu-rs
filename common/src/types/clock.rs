@@ -9,7 +9,7 @@ impl Clock {
         Self(timestamp)
     }
 
-    pub fn as_f64(&self) -> f64 {
+    pub fn as_secs(&self) -> f64 {
         self.0
     }
 }
@@ -20,13 +20,13 @@ mod tests {
     #[test]
     fn test_clock_now() {
         let clock = Clock::now();
-        assert!(clock.as_f64() > 0.0);
+        assert!(clock.as_secs() > 0.0);
     }
 
     #[test]
-    fn test_clock_as_f64() {
+    fn test_clock_as_secs() {
         let clock = Clock(12345.678);
-        assert_eq!(clock.as_f64(), 12345.678);
+        assert_eq!(clock.as_secs(), 12345.678);
     }
 
     #[test]
@@ -34,6 +34,6 @@ mod tests {
         let clock = Clock::now();
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         let timestamp = now.as_secs() as f64 + now.subsec_micros() as f64 * 1e-6;
-        assert!((clock.as_f64() - timestamp).abs() < 1.0);
+        assert!((clock.as_secs() - timestamp).abs() < 1.0);
     }
 }

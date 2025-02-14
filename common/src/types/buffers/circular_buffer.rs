@@ -51,6 +51,15 @@ impl<T: Clone + Default> CircularBuffer<T> {
         out
     }
 
+    /// Returns a reference to the front element of the CircularBuffer
+    pub fn peek_front(&self) -> &T {
+        self.buffer.front().unwrap()
+    }
+
+    /// Returns a reference to the back element of the CircularBuffer
+    pub fn peek_back(&self) -> &T {
+        self.buffer.back().unwrap()
+    }
     /// Returns size of CircularBuffer
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {

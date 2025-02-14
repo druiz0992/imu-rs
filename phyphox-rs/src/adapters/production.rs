@@ -117,7 +117,7 @@ impl PhyphoxPort for Phyphox {
         window_size: Option<usize>,
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
-        let timestamp_at_boot = Clock::now().as_f64();
+        let timestamp_at_boot = Clock::now().as_secs();
         self.clear_cmd().await?;
         self.start_cmd().await?;
 

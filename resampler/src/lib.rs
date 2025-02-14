@@ -1,6 +1,7 @@
-pub mod resampler;
+pub mod pipeline;
 
-pub use resampler::{ResamplePolicy, Resampler};
+pub use pipeline::resampler::ResamplePolicy;
+pub use pipeline::ResamplerPipeline;
 
 mod utils;
 
@@ -17,9 +18,9 @@ use common::types::sensors::SensorType;
 pub fn run<T, S>(
     sensor_tag: &str,
     sensor_cluster: Vec<SensorType>,
-    resampling_period_millis: u64,
-    resampling_policy: Option<ResamplePolicy>,
-) -> (tokio::task::JoinHandle<()>, Arc<Resampler<T, S>>)
+    resampling_period_millis: f64,
+    resampling_policy: ResamplePolicy,
+) -> (tokio::task::JoinHandle<()>, Arc<ResamplerPipeline<T, S>>)
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
@@ -27,17 +28,18 @@ where
     Average<S::Untimed>: IMUFilter<S>,
     WeightedAverage<S::Untimed>: IMUFilter<S>,
 {
-    let resampler = Arc::new(Resampler::new(sensor_tag, sensor_cluster));
-    let resampler_clone = Arc::clone(&resampler);
+    let pipeline = Arc::new(ResamplerPipeline::new(sensor_tag, sensor_cluster));
+
+    let pipeline_clone = Arc::clone(&pipeline);
     let handle = tokio::spawn({
         async move {
-            if let Err(e) = resampler_clone
-                .start(resampling_period_millis, resampling_policy)
+            if let Err(e) = pipeline_clone
+                .start(resampling_policy, resampling_period_millis)
                 .await
             {
                 error!("Error in Phyphox loop: {}", e);
             }
         }
     });
-    (handle, resampler)
+    (handle, pipeline)
 }

@@ -24,7 +24,7 @@ fn process_samples(
 }
 
 #[tokio::test]
-async fn test1() {
+async fn test_resampler_pipeline() {
     let sensor_tag = "Test";
     // Sample update frequency
     let update_period_millis = 20;
@@ -53,8 +53,8 @@ async fn test1() {
     .unwrap();
 
     // start resampler
-    let resampling_period_millis = 100;
-    let resampling_policy = Some(ResamplePolicy::WeightedAverage);
+    let resampling_period_millis = 100.0;
+    let resampling_policy = ResamplePolicy::WeightedAverage;
     let (handle_resampler, resampler) = run::<SensorReadings<Sample3D>, _>(
         sensor_tag,
         sensor_cluster,

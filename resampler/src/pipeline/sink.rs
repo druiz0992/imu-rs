@@ -4,14 +4,14 @@ use publisher::Listener;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use super::Resampler;
+use super::ResamplerPipeline;
 use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSink, IMUSource};
 use common::types::filters::Average;
 use common::types::filters::WeightedAverage;
 use common::types::sensors::SensorType;
 
 #[async_trait]
-impl<T, S> IMUSink<T, S> for Resampler<T, S>
+impl<T, S> IMUSink<T, S> for ResamplerPipeline<T, S>
 where
     S: Send + Sync + IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
