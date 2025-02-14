@@ -144,7 +144,7 @@ mod tests {
         let resampled_sample = resampler.resample(&readings, 1000.0);
 
         assert_eq!(resampled_sample.get_measurement(), [2.5, 3.5, 4.5].into());
-        assert_eq!(resampled_sample.get_timestamp(), 1000.0);
+        assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
     }
 
     #[tokio::test]
@@ -159,7 +159,7 @@ mod tests {
         let resampled_sample = resampler.resample(&readings, 1000.0);
 
         assert_eq!(resampled_sample.get_measurement(), [1.0, 2.0, 3.0].into());
-        assert_eq!(resampled_sample.get_timestamp(), 1000.0);
+        assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
     }
 
     #[tokio::test]
@@ -173,7 +173,7 @@ mod tests {
         let resampled_sample = resampler.resample(&readings, 1000.0);
 
         assert_eq!(resampled_sample.get_measurement(), [0.0, 0.0, 0.0].into());
-        assert_eq!(resampled_sample.get_timestamp(), 1000.0);
+        assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
     }
 
     #[tokio::test]
@@ -189,7 +189,7 @@ mod tests {
         let resampled_sample = resampler.resample(&readings, 1000.0);
 
         assert_eq!(resampled_sample.get_measurement(), [1.0, 2.0, 3.0].into());
-        assert_eq!(resampled_sample.get_timestamp(), 1000.0);
+        assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
     }
 
     #[tokio::test]
@@ -205,7 +205,7 @@ mod tests {
         let resampled_sample = resampler.resample(&readings, 1000.0);
 
         assert_eq!(resampled_sample.get_measurement(), [4.0, 5.0, 6.0].into());
-        assert_eq!(resampled_sample.get_timestamp(), 1000.0);
+        assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
     }
 
     #[tokio::test]
@@ -228,6 +228,6 @@ mod tests {
         assert!(
             resampled_sample.get_measurement() - sample1.get_measurement() < [eps, eps, eps].into()
         );
-        assert_eq!(resampled_sample.get_timestamp(), 950.0);
+        assert_eq!(resampled_sample.get_timestamp_secs(), 950.0);
     }
 }

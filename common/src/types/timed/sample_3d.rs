@@ -13,7 +13,7 @@ use crate::types::untimed::{xyz::N_XYZ_COORDINATES, XYZ};
 /// let measurement = [1.0, 2.0, 3.0];
 /// let sample = Sample3D::new(timestamp, measurement);
 ///
-/// assert_eq!(sample.get_timestamp(), timestamp);
+/// assert_eq!(sample.get_timestamp_secs(), timestamp);
 /// assert_eq!(sample.get_measurement(), XYZ::from(measurement));
 /// ```
 
@@ -55,7 +55,7 @@ impl IMUSample for Sample3D {
         self.measurement.clone()
     }
 
-    fn get_timestamp(&self) -> f64 {
+    fn get_timestamp_secs(&self) -> f64 {
         self.timestamp
     }
 
@@ -110,11 +110,11 @@ mod tests {
     }
 
     #[test]
-    fn test_get_timestamp() {
+    fn test_get_timestamp_secs() {
         let timestamp = 1627846267.0;
         let measurement = [1.0, 2.0, 3.0];
         let sample = Sample3D::new(timestamp, measurement);
 
-        assert_eq!(sample.get_timestamp(), timestamp);
+        assert_eq!(sample.get_timestamp_secs(), timestamp);
     }
 }

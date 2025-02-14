@@ -65,7 +65,7 @@ where
 
         for s in samples {
             let raw_samples = s.get_measurement();
-            let sample_timestamp = s.get_timestamp();
+            let sample_timestamp = s.get_timestamp_secs();
             let w = (1.0 / ((sample_timestamp - self.mid_point).abs() + WEIGHTED_AVERAGE_EPS))
                 .powf(WEIGHTED_AVERAGE_ALPHA);
             aggregate += raw_samples * w;
@@ -95,7 +95,7 @@ where
 
         for s in samples {
             let raw_sample = s.get_measurement().inner();
-            let timestamp = s.get_timestamp();
+            let timestamp = s.get_timestamp_secs();
             let w = (1.0 / ((timestamp - self.mid_point).abs() + WEIGHTED_AVERAGE_EPS))
                 .powf(WEIGHTED_AVERAGE_ALPHA);
             aggregate = aggregate.slerp(&raw_sample, w / (total_w + w));

@@ -31,7 +31,7 @@ pub trait IMUSample: Send + Sync + Clone + Default + 'static {
     type Untimed: IMUUntimedSample;
 
     ///  Returns the timestamp of the sample.
-    fn get_timestamp(&self) -> f64;
+    fn get_timestamp_secs(&self) -> f64;
     ///  Returns the measurement data
     fn get_measurement(&self) -> Self::Untimed;
     /// Returns a IMUSample

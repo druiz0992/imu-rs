@@ -80,7 +80,6 @@ where
         period_secs: f64,
     ) -> Vec<T> {
         let mut buffer_clone = utils::clone_and_clear(self.buffer.clone()).await;
-        // Apply the filtering logic using the helper function
         for sensor_buffer in buffer_clone.iter_mut() {
             utils::collect_samples(sensor_buffer, timestamp_now_secs, period_secs).await;
         }
@@ -108,8 +107,6 @@ where
             resampling_period_millis,
         );
         let resampling_duration_secs = Duration::from_secs_f64(resampling_period_millis * 1000.0);
-
-        sleep(resampling_duration_secs).await;
 
         loop {
             sleep(resampling_duration_secs).await;

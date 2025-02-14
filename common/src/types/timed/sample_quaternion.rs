@@ -15,7 +15,7 @@ use crate::types::untimed::UnitQuaternion;
 /// let measurement = [1.0, 0.0, 0.0, 0.0];
 /// let sample = SampleQuaternion::new(timestamp, measurement);
 ///
-/// assert_eq!(sample.get_timestamp(), timestamp);
+/// assert_eq!(sample.get_timestamp_secs(), timestamp);
 /// assert_eq!(sample.get_measurement(), UnitQuaternion::from(measurement));
 /// ```
 
@@ -53,7 +53,7 @@ impl IMUSample for SampleQuaternion {
     }
 
     ///  Returns the timestamp of the sample.
-    fn get_timestamp(&self) -> f64 {
+    fn get_timestamp_secs(&self) -> f64 {
         self.timestamp
     }
 
@@ -108,11 +108,11 @@ mod tests {
     }
 
     #[test]
-    fn test_get_timestamp() {
+    fn test_get_timestamp_secs() {
         let timestamp = 1627846267.0;
         let measurement = [1.0, 2.0, 3.0, 4.0];
         let sample = SampleQuaternion::new(timestamp, measurement);
 
-        assert_eq!(sample.get_timestamp(), timestamp);
+        assert_eq!(sample.get_timestamp_secs(), timestamp);
     }
 }

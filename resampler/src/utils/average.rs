@@ -81,7 +81,7 @@ mod tests {
         let result = compute_weighted_average(samples, mid_point).unwrap();
         let averaged_sample = result.get_measurement().inner();
 
-        assert_eq!(result.get_timestamp(), 2.0);
+        assert_eq!(result.get_timestamp_secs(), 2.0);
         assert_eq!(averaged_sample[0], 3.0);
         assert_eq!(averaged_sample[1], 4.0);
         assert_eq!(averaged_sample[2], 5.0);

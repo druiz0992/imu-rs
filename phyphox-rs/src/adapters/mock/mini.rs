@@ -86,7 +86,11 @@ impl PhyphoxMock {
         })
     }
 
-    async fn get_next_samples(&self, buffer_idx: usize, timestamp_at_boot: f64) -> Vec<Sample3D> {
+    async fn get_next_samples(
+        &self,
+        buffer_idx: usize,
+        timestamp_at_boot_secs: f64,
+    ) -> Vec<Sample3D> {
         let mut new_samples = Vec::new();
         let pending_samples = select_random_pending_samples();
         let mut rng = StdRng::from_entropy();
@@ -109,7 +113,7 @@ impl PhyphoxMock {
                     }
                     let next_measurement: XYZ = XYZ::try_from(next_measurement).unwrap();
                     new_samples.push(Sample3D::from_measurement(
-                        sample_timestamp + timestamp_at_boot,
+                        sample_timestamp / 1000.0 + timestamp_at_boot_secs,
                         next_measurement,
                     ))
                 } else {
@@ -147,7 +151,7 @@ impl PhyphoxPort for PhyphoxMock {
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
-        let timestamp_at_boot = Clock::now().as_secs();
+        let timestamp_at_boot_secs = Clock::now().as_secs();
         loop {
             tokio::select! {
                     _ = abort_signal.notified() => {
@@ -166,7 +170,7 @@ impl PhyphoxPort for PhyphoxMock {
                         sensor_type::MAGNETOMETER_OFFSET..sensor_type::MAX_OFFSET => 2,
                         _ => 2,
                     };
-                    let samples = self.get_next_samples(sensor_idx, timestamp_at_boot).await;
+                    let samples = self.get_next_samples(sensor_idx, timestamp_at_boot_secs).await;
                     let buffer = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), samples);
                     if let Some(publisher) = publisher.as_ref() {
                         publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;

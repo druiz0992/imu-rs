@@ -67,7 +67,7 @@ where
                 let mut timestamps = Vec::new();
                 for r in readings.iter() {
                     measurements.push(Vector3::from_vec(r.get_measurement().into()));
-                    timestamps.push(r.get_timestamp());
+                    timestamps.push(r.get_timestamp_secs());
                 }
                 (timestamps, measurements)
             })

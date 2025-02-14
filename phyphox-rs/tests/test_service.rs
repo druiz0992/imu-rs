@@ -23,10 +23,10 @@ fn process_samples(
         !matches!(samples.get_sensor_type(), SensorType::Other(_, _)),
         "Unexpected SensorType::Other"
     );
-    if let MockValue::Float(timestamp_at_boot) = value {
+    if let MockValue::Float(timestamp_at_boot_secs) = value {
         if usize::from(sensor_type) < sensor_type::MAGNETOMETER_OFFSET {
             for sample in samples.get_samples() {
-                assert!(sample.get_timestamp() < timestamp_at_boot + 3.0);
+                assert!(sample.get_timestamp_secs() < timestamp_at_boot_secs + 0.003);
             }
         }
     }
@@ -188,7 +188,7 @@ async fn test_stop_receiving_accelerometer_samples() {
         SensorType::Gyroscope(gyro_id),
         SensorType::Magnetometer(mag_id),
     ];
-    let timestamp_at_boot = Clock::now().as_secs();
+    let timestamp_at_boot_secs = Clock::now().as_secs();
 
     // Start phyphox mock service
     let (handle, phyphox) = services::run_mock_service(
@@ -232,8 +232,8 @@ async fn test_stop_receiving_accelerometer_samples() {
     let samples = buffer.clone();
     assert!(!samples.is_empty());
     for sample in samples {
-        let timestamp = sample.get_timestamp();
-        assert!(timestamp < 3.0 + timestamp_at_boot);
+        let timestamp = sample.get_timestamp_secs();
+        assert!(timestamp < 0.003 + timestamp_at_boot_secs);
     }
 }
 

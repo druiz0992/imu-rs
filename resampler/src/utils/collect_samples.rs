@@ -14,7 +14,7 @@ pub(crate) async fn collect_samples<T, S>(
         .get_samples()
         .into_iter()
         .filter_map(|sample| {
-            let sample_timestamp = sample.get_timestamp();
+            let sample_timestamp = sample.get_timestamp_secs();
             if sample_timestamp <= timestamp_now_secs
                 && sample_timestamp
                     >= timestamp_now_secs - period_secs * SAMPLES_TILL_TIMESTAMP_SAFEGUARD_FACTOR

@@ -28,7 +28,7 @@ where
     pub(crate) fn push(&mut self, sensor_type: &SensorType, elem: S) {
         let buffer = self.cache.get_mut(sensor_type).unwrap();
         let newest = buffer.peek_back();
-        if newest.get_timestamp() < elem.get_timestamp() {
+        if newest.get_timestamp_secs() < elem.get_timestamp_secs() {
             buffer.push(elem);
         }
     }
