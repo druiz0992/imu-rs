@@ -171,6 +171,7 @@ impl PhyphoxPort for PhyphoxMock {
                         _ => 2,
                     };
                     let samples = self.get_next_samples(sensor_idx, timestamp_at_boot_secs).await;
+                     println!("Phyphox sent samples: sensor: {:?}, time: {}, n_samples: {}", sensor, common::types::clock::Clock::now().as_secs(), samples.len());
                     let buffer = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), samples);
                     if let Some(publisher) = publisher.as_ref() {
                         publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;

@@ -32,6 +32,12 @@ where
         if let Some(mutex) = self.buffer.get(&sensor_type) {
             let mut data = mutex.lock().await;
             data.extend(samples.get_samples());
+            println!(
+                "Resampler received samples: sensor: {:?}, time{}, n_samples {} ",
+                sensor_type,
+                common::types::clock::Clock::now().as_secs(),
+                samples.get_samples().len()
+            );
         }
     }
 }

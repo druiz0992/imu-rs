@@ -6,7 +6,7 @@ use common::traits::IMUSink;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use phyphox_rs::services;
-use resampler_rs::ResamplePolicy;
+use resampler_rs::SmothingPolicy;
 use test_utils::sink_mock::{MockValue, SinkMock};
 use tokio::time::Duration;
 
@@ -27,7 +27,7 @@ fn process_samples(
 async fn test_resampler_pipeline() {
     let sensor_tag = "Test";
     // Sample update frequency
-    let update_period_millis = 20;
+    let update_period_millis = 100;
     // Sample generation period
     let capture_sampling_period_millis = 10;
     let add_sensor_noise = false;
@@ -53,12 +53,14 @@ async fn test_resampler_pipeline() {
     .unwrap();
 
     // start resampler
-    let resampling_period_millis = 100.0;
-    let resampling_policy = ResamplePolicy::WeightedAverage;
+    let resampling_period_millis = 10.0;
+    let resampling_buffer_factor = 1;
+    let resampling_policy = SmothingPolicy::WeightedAverage;
     let (handle_resampler, resampler) = run::<SensorReadings<Sample3D>, _>(
         sensor_tag,
         sensor_cluster,
         resampling_period_millis,
+        resampling_buffer_factor,
         resampling_policy,
     );
 
@@ -87,7 +89,7 @@ async fn test_resampler_pipeline() {
         .unwrap();
 
     // Timeout duration: 5 seconds
-    let timeout_duration = Duration::from_secs(2);
+    let timeout_duration = Duration::from_secs(1);
 
     // Use timeout to abort test after 5 seconds
     let _ = tokio::time::timeout(timeout_duration, async {

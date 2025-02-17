@@ -1,13 +1,14 @@
 use crate::utils;
 use common::types::filters::Average;
 use common::types::filters::WeightedAverage;
-use std::collections::HashMap;
 
 use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUUntimedSample};
 use common::types::sensors::SensorType;
 
+use super::cache::{Cache, Interpolable};
+
 #[derive(Default, Clone)]
-pub enum ResamplePolicy {
+pub enum SmothingPolicy {
     Averaging,
     FirstSample,
     LastSample,
@@ -16,112 +17,103 @@ pub enum ResamplePolicy {
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct Resampler<S> {
-    policy: ResamplePolicy,
-    resampling_period_millis: f64,
-    cache: HashMap<SensorType, S>,
+pub(crate) struct Resampler<T, U>
+where
+    T: IMUSample,
+    T: IMUSample<Untimed = U>,
+{
+    interpolator: Cache<T, U>,
+    policy: SmothingPolicy,
 }
 
-impl<S> Resampler<S>
+impl<T, U> Resampler<T, U>
 where
-    S: IMUSample,
-    S::Untimed: IMUUntimedSample,
+    T: IMUSample,
+    T: IMUSample<Untimed = U>,
+    U: IMUUntimedSample,
 {
-    pub(crate) fn new(
-        sensor_cluster: &[SensorType],
-        policy: ResamplePolicy,
-        period_millis: f64,
-    ) -> Self {
-        let mut cache = HashMap::new();
-        for sensor_type in sensor_cluster.iter() {
-            cache.insert(sensor_type.clone(), S::default());
-        }
+    pub(crate) fn new(sensor_cluster: &[SensorType], policy: SmothingPolicy) -> Self {
         Self {
             policy,
-            resampling_period_millis: period_millis,
-            cache,
+            interpolator: Cache::new(sensor_cluster),
         }
     }
 
-    pub(crate) fn resample<T>(&mut self, imu_samples: &T, timestamp_now_secs: f64) -> S
-    where
-        T: Send + Sync + IMUReadings<S> + 'static,
-        Average<S::Untimed>: IMUFilter<S>,
-        WeightedAverage<S::Untimed>: IMUFilter<S>,
+    pub(crate) fn buffer_samples<R>(
+        &mut self,
+        imu_samples_vec: Vec<R>,
+        new_sample_timestamp_secs: f64,
+    ) where
+        R: Send + Sync + IMUReadings<T> + 'static,
+        Average<T::Untimed>: IMUFilter<T>,
+        WeightedAverage<T::Untimed>: IMUFilter<T>,
+        Cache<T, T::Untimed>: Interpolable<T, T::Untimed>,
     {
-        let resampled_samples = match apply_resample_policy(
-            imu_samples,
-            &self.policy,
-            timestamp_now_secs,
-            self.resampling_period_millis,
-        ) {
-            None => S::from_measurement(
-                timestamp_now_secs,
-                self.cache
-                    .get(&imu_samples.get_sensor_type())
-                    .unwrap()
-                    .clone()
-                    .get_measurement(),
-            ),
-            Some(sample) => sample,
-        };
+        for imu_samples in imu_samples_vec.into_iter() {
+            let sensor_type = imu_samples.get_sensor_type();
+            let resampled_samples = match self.smoothing(&imu_samples, new_sample_timestamp_secs) {
+                None => T::from_measurement(
+                    new_sample_timestamp_secs,
+                    self.interpolator
+                        .peek_newest(&sensor_type)
+                        .unwrap()
+                        .clone()
+                        .get_measurement(),
+                ),
+                Some(sample) => sample,
+            };
 
-        // Insert the processed sample into cache
-        self.cache
-            .insert(imu_samples.get_sensor_type(), resampled_samples.clone());
-        resampled_samples
-    }
-}
-
-fn apply_resample_policy<T, S>(
-    imu_samples: &T,
-    resample_policy: &ResamplePolicy,
-    timestamp: f64,
-    resampling_period_millis: f64,
-) -> Option<S>
-where
-    S: IMUSample,
-    T: Send + Sync + IMUReadings<S> + 'static,
-    S::Untimed: IMUUntimedSample,
-    Average<S::Untimed>: IMUFilter<S>,
-    WeightedAverage<S::Untimed>: IMUFilter<S>,
-{
-    let n_samples = imu_samples.get_samples().len();
-
-    match n_samples {
-        0 => None,
-        1 => {
-            let sample = S::from_measurement(
-                timestamp,
-                imu_samples.get_samples()[0].clone().get_measurement(),
-            );
-            Some(sample)
+            // Insert the processed sample into cache
+            self.interpolator
+                .push(&sensor_type, resampled_samples.clone());
         }
-        _ => {
-            // Handle case where there are multiple samples
-            match resample_policy {
-                ResamplePolicy::Averaging => {
-                    if let Ok(sample) = utils::compute_average(imu_samples.get_samples()) {
-                        Some(S::from_measurement(timestamp, sample.get_measurement()))
-                    } else {
-                        None
+    }
+
+    fn smoothing<R>(&self, imu_samples: &R, sample_time: f64) -> Option<T>
+    where
+        R: Send + Sync + IMUReadings<T> + 'static,
+        Average<T::Untimed>: IMUFilter<T>,
+        WeightedAverage<T::Untimed>: IMUFilter<T>,
+        Cache<T, T::Untimed>: Interpolable<T, T::Untimed>,
+    {
+        let n_samples = imu_samples.get_samples().len();
+
+        match n_samples {
+            0 => None,
+            1 => {
+                let sample = T::from_measurement(
+                    sample_time,
+                    imu_samples.get_samples()[0].clone().get_measurement(),
+                );
+                Some(sample)
+            }
+            _ => {
+                // Handle case where there are multiple samples
+                match self.policy {
+                    SmothingPolicy::Averaging => {
+                        utils::compute_average(sample_time, imu_samples.get_samples()).ok()
+                    }
+                    SmothingPolicy::FirstSample => Some(T::from_measurement(
+                        sample_time,
+                        imu_samples.get_samples()[0].get_measurement(),
+                    )),
+                    SmothingPolicy::LastSample => Some(T::from_measurement(
+                        sample_time,
+                        imu_samples.get_samples()[n_samples - 1].get_measurement(),
+                    )),
+                    SmothingPolicy::WeightedAverage => {
+                        utils::compute_weighted_average(sample_time, imu_samples.get_samples()).ok()
                     }
                 }
-                ResamplePolicy::FirstSample => Some(S::from_measurement(
-                    timestamp,
-                    imu_samples.get_samples()[0].get_measurement(),
-                )),
-                ResamplePolicy::LastSample => Some(S::from_measurement(
-                    timestamp,
-                    imu_samples.get_samples()[n_samples - 1].get_measurement(),
-                )),
-                ResamplePolicy::WeightedAverage => utils::compute_weighted_average(
-                    imu_samples.get_samples(),
-                    timestamp - resampling_period_millis / 2.0,
-                )
-                .ok(),
             }
         }
+    }
+
+    pub(crate) fn interpolate(&mut self, timestamp_now_secs: f64) -> Vec<(SensorType, T)>
+    where
+        Cache<T, T::Untimed>: Interpolable<T, T::Untimed>,
+    {
+        self.interpolator.interpolate_samples(timestamp_now_secs)
     }
 }
 
@@ -133,101 +125,102 @@ mod tests {
     use uuid::Uuid;
 
     #[tokio::test]
-    async fn test_apply_resampling_policies_averaging() {
+    async fn test_smoothing_policy_averaging() {
         let acc_id = Uuid::new_v4();
         let sensor = SensorType::Accelerometer(acc_id);
         let sample1 = Sample3D::new(950.0, [1.0, 2.0, 3.0]);
         let sample2 = Sample3D::new(960.0, [4.0, 5.0, 6.0]);
-        let mut resampler = Resampler::new(&vec![sensor.clone()], ResamplePolicy::Averaging, 100.0);
+        let resampler = Resampler::new(&[sensor.clone()], SmothingPolicy::Averaging);
 
         let readings = SensorReadings::from_vec("Test", sensor, vec![sample1, sample2]);
-        let resampled_sample = resampler.resample(&readings, 1000.0);
+        let resampled_sample = resampler.smoothing(&readings, 1000.0).unwrap();
 
         assert_eq!(resampled_sample.get_measurement(), [2.5, 3.5, 4.5].into());
         assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
     }
 
     #[tokio::test]
-    async fn test_apply_resampling_policies_one_sample() {
+    async fn test_smoothing_policy_one_sample() {
         let acc_id = Uuid::new_v4();
         let sensor = SensorType::Accelerometer(acc_id);
         let sample1 = Sample3D::new(950.0, [1.0, 2.0, 3.0]);
-        let mut resampler = Resampler::new(&vec![sensor.clone()], ResamplePolicy::Averaging, 100.0);
+        let resampler = Resampler::new(&[sensor.clone()], SmothingPolicy::Averaging);
 
         let readings = SensorReadings::from_vec("Test", sensor.clone(), vec![sample1]);
 
-        let resampled_sample = resampler.resample(&readings, 1000.0);
+        let resampled_sample = resampler.smoothing(&readings, 1000.0).unwrap();
 
         assert_eq!(resampled_sample.get_measurement(), [1.0, 2.0, 3.0].into());
         assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
     }
 
     #[tokio::test]
-    async fn test_apply_resampling_policies_averaging_no_samples() {
+    async fn test_smoothing_policy_averaging_no_samples() {
         let acc_id = Uuid::new_v4();
         let sensor = SensorType::Accelerometer(acc_id);
-        let mut resampler =
-            Resampler::<Sample3D>::new(&vec![sensor.clone()], ResamplePolicy::Averaging, 100.0);
+        let resampler = Resampler::<Sample3D, _>::new(&[sensor.clone()], SmothingPolicy::Averaging);
 
         let readings = SensorReadings::from_vec("Test", sensor.clone(), vec![]);
-        let resampled_sample = resampler.resample(&readings, 1000.0);
-
-        assert_eq!(resampled_sample.get_measurement(), [0.0, 0.0, 0.0].into());
-        assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
+        let resampled_sample = resampler.smoothing(&readings, 1000.0);
+        assert!(resampled_sample.is_none());
     }
 
     #[tokio::test]
-    async fn test_apply_resampling_policies_first_sample() {
+    async fn test_smoothing_policy_first_sample() {
         let acc_id = Uuid::new_v4();
         let sensor = SensorType::Accelerometer(acc_id);
         let sample1 = Sample3D::new(950.0, [1.0, 2.0, 3.0]);
         let sample2 = Sample3D::new(960.0, [4.0, 5.0, 6.0]);
-        let mut resampler =
-            Resampler::new(&vec![sensor.clone()], ResamplePolicy::FirstSample, 100.0);
+        let resampler = Resampler::new(&[sensor.clone()], SmothingPolicy::FirstSample);
 
         let readings = SensorReadings::from_vec("Test", sensor.clone(), vec![sample1, sample2]);
-        let resampled_sample = resampler.resample(&readings, 1000.0);
+        let resampled_sample = resampler.smoothing(&readings, 1000.0).unwrap();
 
         assert_eq!(resampled_sample.get_measurement(), [1.0, 2.0, 3.0].into());
         assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
     }
 
     #[tokio::test]
-    async fn test_apply_resampling_policies_last_sample() {
+    async fn test_smoothing_policy_last_sample() {
         let acc_id = Uuid::new_v4();
         let sensor = SensorType::Accelerometer(acc_id);
         let sample1 = Sample3D::new(950.0, [1.0, 2.0, 3.0]);
         let sample2 = Sample3D::new(960.0, [4.0, 5.0, 6.0]);
-        let mut resampler =
-            Resampler::new(&vec![sensor.clone()], ResamplePolicy::LastSample, 100.0);
+        let resampler = Resampler::new(&[sensor.clone()], SmothingPolicy::LastSample);
 
         let readings = SensorReadings::from_vec("Test", sensor.clone(), vec![sample1, sample2]);
-        let resampled_sample = resampler.resample(&readings, 1000.0);
+        let resampled_sample = resampler.smoothing(&readings, 1000.0).unwrap();
 
         assert_eq!(resampled_sample.get_measurement(), [4.0, 5.0, 6.0].into());
         assert_eq!(resampled_sample.get_timestamp_secs(), 1000.0);
     }
 
     #[tokio::test]
-    async fn test_apply_resampling_policies_weighted_average() {
+    async fn test_smoothing_policy_weighted_average() {
         let acc_id = Uuid::new_v4();
         let sensor = SensorType::Accelerometer(acc_id);
         let sample1 = Sample3D::new(950.0, [1.0, 2.0, 3.0]);
         let sample2 = Sample3D::new(960.0, [4.0, 5.0, 6.0]);
-        let mut resampler = Resampler::new(
-            &vec![sensor.clone()],
-            ResamplePolicy::WeightedAverage,
-            100.0,
-        );
+        let resampler = Resampler::new(&[sensor.clone()], SmothingPolicy::WeightedAverage);
 
-        let readings =
-            SensorReadings::from_vec("Test", sensor.clone(), vec![sample1.clone(), sample2]);
-        let resampled_sample = resampler.resample(&readings, 1000.0);
+        let readings = SensorReadings::from_vec(
+            "Test",
+            sensor.clone(),
+            vec![sample1.clone(), sample2.clone()],
+        );
+        let resampled_sample1 = resampler.smoothing(&readings, 950.0).unwrap();
+        let resampled_sample2 = resampler.smoothing(&readings, 960.0).unwrap();
 
         let eps = 1e-5;
         assert!(
-            resampled_sample.get_measurement() - sample1.get_measurement() < [eps, eps, eps].into()
+            resampled_sample1.get_measurement() - sample1.get_measurement()
+                < [eps, eps, eps].into()
         );
-        assert_eq!(resampled_sample.get_timestamp_secs(), 950.0);
+        assert_eq!(resampled_sample1.get_timestamp_secs(), 950.0);
+        assert!(
+            resampled_sample2.get_measurement() - sample2.get_measurement()
+                < [eps, eps, eps].into()
+        );
+        assert_eq!(resampled_sample2.get_timestamp_secs(), 960.0);
     }
 }

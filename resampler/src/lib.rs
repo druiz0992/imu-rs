@@ -1,6 +1,6 @@
 pub mod pipeline;
 
-pub use pipeline::resampler::ResamplePolicy;
+pub use pipeline::resampler::SmothingPolicy;
 pub use pipeline::ResamplerPipeline;
 
 mod utils;
@@ -8,6 +8,7 @@ mod utils;
 use log::error;
 use std::sync::Arc;
 
+use crate::pipeline::cache::{Cache, Interpolable};
 use common::traits::imu::{IMUFilter, IMUUntimedSample};
 use common::traits::{IMUReadings, IMUSample};
 use common::types::filters::{Average, WeightedAverage};
@@ -19,7 +20,8 @@ pub fn run<T, S>(
     sensor_tag: &str,
     sensor_cluster: Vec<SensorType>,
     resampling_period_millis: f64,
-    resampling_policy: ResamplePolicy,
+    resamping_buffer_factor: u32,
+    resampling_policy: SmothingPolicy,
 ) -> (tokio::task::JoinHandle<()>, Arc<ResamplerPipeline<T, S>>)
 where
     S: IMUSample,
@@ -27,6 +29,7 @@ where
     S::Untimed: IMUUntimedSample,
     Average<S::Untimed>: IMUFilter<S>,
     WeightedAverage<S::Untimed>: IMUFilter<S>,
+    Cache<S, S::Untimed>: Interpolable<S, S::Untimed>,
 {
     let pipeline = Arc::new(ResamplerPipeline::new(sensor_tag, sensor_cluster));
 
@@ -34,7 +37,11 @@ where
     let handle = tokio::spawn({
         async move {
             if let Err(e) = pipeline_clone
-                .start(resampling_policy, resampling_period_millis)
+                .start(
+                    resampling_policy,
+                    resampling_period_millis,
+                    resamping_buffer_factor,
+                )
                 .await
             {
                 error!("Error in Phyphox loop: {}", e);

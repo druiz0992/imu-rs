@@ -9,7 +9,10 @@ use common::types::filters::{Average, WeightedAverage};
 ///
 /// # Panics
 /// Panics if the input vector `samples` is empty.
-pub(crate) fn compute_average<T>(samples: Vec<T>) -> Result<T, Box<dyn std::error::Error>>
+pub(crate) fn compute_average<T>(
+    timestamp: f64,
+    samples: Vec<T>,
+) -> Result<T, Box<dyn std::error::Error>>
 where
     T: IMUSample,
     T::Untimed: IMUUntimedSample,
@@ -18,6 +21,7 @@ where
     let mut filter: Average<T::Untimed> = Average::new();
     let filtered_samples = filter.filter_batch(samples)?;
     let averaged_sample = filtered_samples.last().cloned().unwrap_or_default();
+    let averaged_sample = T::from_measurement(timestamp, averaged_sample.get_measurement());
     Ok(averaged_sample)
 }
 
@@ -28,18 +32,18 @@ where
 ///
 /// The result is an array `[t_weighted_avg, x_weighted_avg, y_weighted_avg, z_weighted_avg]`.
 pub(crate) fn compute_weighted_average<T>(
+    timestamp: f64,
     samples: Vec<T>,
-    mid_point: f64,
 ) -> Result<T, Box<dyn std::error::Error>>
 where
     T: IMUSample,
     T::Untimed: IMUUntimedSample,
     WeightedAverage<T::Untimed>: IMUFilter<T>,
 {
-    let mut filter: WeightedAverage<T::Untimed> = WeightedAverage::new(mid_point);
+    let mut filter: WeightedAverage<T::Untimed> = WeightedAverage::new(timestamp);
     let filtered_samples = filter.filter_batch(samples)?;
     let averaged_sample = filtered_samples.last().cloned().unwrap_or_default();
-    let averaged_sample = T::from_measurement(mid_point, averaged_sample.get_measurement());
+    let averaged_sample = T::from_measurement(timestamp, averaged_sample.get_measurement());
     Ok(averaged_sample)
 }
 
@@ -55,7 +59,7 @@ mod tests {
             Sample3D::new(2.0, [3.0, 4.0, 5.0]),
             Sample3D::new(3.0, [4.0, 5.0, 6.0]),
         ];
-        let result = compute_average(samples).unwrap();
+        let result = compute_average(1.0, samples).unwrap();
         let averaged_sample = result.get_measurement().inner();
 
         assert_eq!(averaged_sample[0], 3.0);
@@ -67,7 +71,7 @@ mod tests {
     #[should_panic]
     fn test_compute_average_empty() {
         let samples: Vec<Sample3D> = vec![];
-        compute_average(samples).unwrap();
+        compute_average(1.0, samples).unwrap();
     }
 
     #[test]
@@ -78,7 +82,7 @@ mod tests {
             Sample3D::new(3.0, [4.0, 5.0, 6.0]),
         ];
         let mid_point = 2.0;
-        let result = compute_weighted_average(samples, mid_point).unwrap();
+        let result = compute_weighted_average(mid_point, samples).unwrap();
         let averaged_sample = result.get_measurement().inner();
 
         assert_eq!(result.get_timestamp_secs(), 2.0);
@@ -92,6 +96,6 @@ mod tests {
     fn test_compute_weighted_average_empty() {
         let samples: Vec<Sample3D> = vec![];
         let mid_point = 2.0;
-        compute_weighted_average(samples, mid_point).unwrap();
+        compute_weighted_average(mid_point, samples).unwrap();
     }
 }
