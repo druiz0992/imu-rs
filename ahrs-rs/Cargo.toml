@@ -13,6 +13,8 @@ publisher = { path = "../publisher"}
 nalgebra.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+dashmap.workspace = true
+async-trait.workspace = true
 
 [dev-dependencies]
 test_utils = {path = "../test-utils"}
