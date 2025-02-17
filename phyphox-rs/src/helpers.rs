@@ -94,7 +94,10 @@ pub(crate) fn parse_results(
 /// output[1] : [x[0], y[0]]
 /// output[2] : [x[1], y[1]]
 /// ...
-pub(crate) fn combine_results(results: Vec<Vec<f64>>) -> (Vec<f64>, Vec<XYZ>) {
+pub(crate) fn combine_results(
+    results: Vec<Vec<f64>>,
+    timestamp_at_boot_secs: f64,
+) -> (Vec<f64>, Vec<XYZ>) {
     let row_count = results.len().min(4);
 
     let n_samples = results[0].len();
@@ -112,7 +115,7 @@ pub(crate) fn combine_results(results: Vec<Vec<f64>>) -> (Vec<f64>, Vec<XYZ>) {
 
         if let Ok(xyz) = XYZ::try_from(values) {
             untimed_data.push(xyz);
-            timestamp.push(results[0][row]);
+            timestamp.push(results[0][row] / 1000.0 + timestamp_at_boot_secs);
         }
     }
     (timestamp, untimed_data)
@@ -266,8 +269,8 @@ mod tests {
             vec![0.4, 0.5, 0.6],
             vec![0.7, 0.8, 0.9],
         ];
-        let (timestamps, untimed_data) = combine_results(results);
-        assert_eq!(timestamps, vec![1.0, 2.0, 3.0]);
+        let (timestamps, untimed_data) = combine_results(results, 0.0);
+        assert_eq!(timestamps, vec![0.001, 0.002, 0.003]);
         assert_eq!(untimed_data.len(), 3);
     }
 

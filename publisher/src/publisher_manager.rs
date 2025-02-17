@@ -1,8 +1,7 @@
+use dashmap::DashMap;
 use std::cmp::Eq;
-use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::Publishable;
@@ -65,8 +64,8 @@ use common::traits::publisher::Notifiable;
 
 #[derive(Clone)]
 pub struct PublisherManager<T, S> {
-    publishers: Arc<RwLock<HashMap<S, Publisher<T>>>>,
-    control: Arc<RwLock<HashMap<Uuid, S>>>,
+    publishers: Arc<DashMap<S, Publisher<T>>>,
+    control: Arc<DashMap<Uuid, S>>,
 }
 
 impl<T, S> PublisherManager<T, S>
@@ -75,34 +74,36 @@ where
     S: Send + Sync + Hash + Eq + Clone + Into<usize>,
 {
     pub fn new(publisher_types: &[S]) -> Self {
-        let mut collection = HashMap::<S, Publisher<T>>::new();
+        let collection = DashMap::<S, Publisher<T>>::new();
         for publisher_type in publisher_types {
             collection.insert(publisher_type.clone(), Publisher::new());
         }
 
         Self {
-            publishers: Arc::new(RwLock::new(collection)),
-            control: Arc::new(RwLock::new(HashMap::new())),
+            publishers: Arc::new(collection),
+            control: Arc::new(DashMap::new()),
         }
     }
 
     pub async fn add_publisher(&mut self, publisher_type: S) {
         let publisher = Publisher::new();
-        let mut publishers = self.publishers.write().await;
-        publishers.insert(publisher_type, publisher);
+        self.publishers.insert(publisher_type, publisher);
     }
 
     pub async fn remove_publisher(&mut self, publisher_type: &S) {
-        let mut publishers = self.publishers.write().await;
-        if let Some(publisher) = publishers.remove(publisher_type) {
+        if let Some((_, publisher)) = self.publishers.remove(publisher_type) {
             publisher.unregister_all().await;
         }
     }
 
     pub async fn get_available_publisher_types(&self) -> Vec<S> {
-        let publishers = self.publishers.read().await;
-        let available_publishers: Vec<S> = publishers.keys().cloned().collect();
-        available_publishers
+        let mut sensor_types: Vec<S> = self
+            .publishers
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect();
+        sensor_types.sort_by_key(|sensor_type| (sensor_type.clone()).into());
+        sensor_types
     }
 
     pub async fn add_listener(
@@ -110,21 +111,17 @@ where
         listener: &mut dyn Notifiable<T>,
         publisher_type: &S,
     ) -> Result<Uuid, String> {
-        let publishers = self.publishers.read().await;
-        if let Some(publisher) = publishers.get(publisher_type) {
+        if let Some(publisher) = self.publishers.get(publisher_type) {
             let id = publisher.register_listener(listener).await;
-            let mut control = self.control.write().await;
-            control.insert(id, publisher_type.clone());
+            self.control.insert(id, publisher_type.clone());
             return Ok(id);
         }
         Err("Publisher doesnt exist".to_string())
     }
 
     pub async fn remove_listener(&self, id: Uuid) -> Result<(), String> {
-        let mut control = self.control.write().await;
-        if let Some(publisher_type) = control.remove(&id) {
-            let publishers = self.publishers.read().await;
-            if let Some(publisher) = publishers.get(&publisher_type) {
+        if let Some((_, publisher_type)) = self.control.remove(&id) {
+            if let Some(publisher) = self.publishers.get(&publisher_type) {
                 publisher.unregister_listener(id).await;
             } else {
                 return Err("Publisher doesnt exist".to_string());
@@ -135,17 +132,17 @@ where
     }
 
     pub async fn notify_listeners(&self, publisher_type: S, data: Arc<T>) {
-        let publishers = self.publishers.read().await;
-        if let Some(publisher) = publishers.get(&publisher_type) {
+        if let Some(publisher) = self.publishers.get(&publisher_type) {
             publisher.notify_listeners(data).await;
         }
     }
 
     pub async fn get_publishers_sorted_by_index(&self) -> Vec<Publisher<T>> {
-        let publishers = self.publishers.read().await;
-        let mut values: Vec<_> = publishers.iter().collect();
-        values.sort_by_key(|(sensor, _)| (*sensor).clone().into());
-        values.into_iter().map(|(_, value)| value.clone()).collect()
+        let sensor_types = self.get_available_publisher_types().await;
+        sensor_types
+            .iter()
+            .map(|sensor_type| self.publishers.get(sensor_type).unwrap().clone())
+            .collect()
     }
 }
 

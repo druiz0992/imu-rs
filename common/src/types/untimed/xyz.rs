@@ -101,7 +101,6 @@ impl Mul<f64> for XYZ {
         Self(self.0 * rhs)
     }
 }
-
 impl BasicArithmetic for XYZ {}
 
 #[cfg(test)]

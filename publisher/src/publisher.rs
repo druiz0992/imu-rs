@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use std::collections::HashMap;
+use dashmap::DashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::task::JoinSet;
 use uuid::Uuid;
 
 use common::traits::Notifiable;
@@ -17,13 +17,13 @@ pub trait Publishable<T> {
 
 #[derive(Clone, Default)]
 pub struct Publisher<T> {
-    listeners: Arc<Mutex<HashMap<Uuid, Callback<T>>>>,
+    listeners: Arc<DashMap<Uuid, Callback<T>>>,
 }
 
 impl<T> Publisher<T> {
     pub fn new() -> Self {
         Self {
-            listeners: Arc::new(Mutex::new(HashMap::new())),
+            listeners: Arc::new(DashMap::new()),
         }
     }
 }
@@ -37,44 +37,34 @@ where
         let callback = listener.get_callback();
         let listener_id = Uuid::new_v4();
         listener.set_id(listener_id);
-        let mut listeners = self.listeners.lock().await;
-        listeners.insert(listener_id, callback);
+        self.listeners.insert(listener_id, callback);
         listener_id
     }
     async fn unregister_all(&self) {
-        let mut listeners = self.listeners.lock().await;
-        listeners.clear();
+        self.listeners.clear();
     }
 
     async fn unregister_listener(&self, listener_id: Uuid) {
-        let mut listeners = self.listeners.lock().await;
-        listeners.remove(&listener_id);
+        self.listeners.remove(&listener_id);
     }
 
     async fn notify_listeners(&self, data: Arc<T>) {
-        let listeners: Vec<(Uuid, Callback<T>)> = {
-            let listeners_guard = self.listeners.lock().await;
-            listeners_guard
-                .iter()
-                .map(|(uuid, callback)| (*uuid, callback.clone()))
-                .collect()
-        };
+        let listeners: Vec<(Uuid, Callback<T>)> = self
+            .listeners
+            .iter()
+            .map(|entry| (*entry.key(), entry.value().clone()))
+            .collect();
 
-        let mut tasks = vec![];
-
-        for listener in listeners {
+        let mut join_set = JoinSet::new();
+        for (uuid, callback) in listeners {
             let data = data.clone();
-            let (uuid, callback) = listener.clone();
-
-            let task = tokio::spawn(async move {
-                callback(uuid, data).await;
-            });
-
-            tasks.push(task);
+            join_set.spawn(async move { callback(uuid, data).await });
         }
 
-        for task in tasks {
-            let _ = task.await;
+        while let Some(result) = join_set.join_next().await {
+            if let Err(e) = result {
+                eprintln!("Task failed: {:?}", e);
+            }
         }
     }
 }

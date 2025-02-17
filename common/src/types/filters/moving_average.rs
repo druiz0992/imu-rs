@@ -69,13 +69,13 @@ where
         self.aggregate = T::default();
         for sample in samples {
             let measurement = sample.get_measurement();
-            let timestamp = sample.get_timestamp();
+            let timestamp = sample.get_timestamp_secs();
             let out = self.buffer.push(measurement.clone());
             self.aggregate -= out;
             self.aggregate += measurement;
             filtered_data.push(U::from_measurement(
                 timestamp,
-                self.aggregate.clone() / 10.0,
+                self.aggregate.clone() / self.window_size,
             ));
         }
         Ok(filtered_data)
@@ -99,7 +99,7 @@ where
 
         for sample in samples {
             let measurement = sample.get_measurement();
-            let timestamp = sample.get_timestamp();
+            let timestamp = sample.get_timestamp_secs();
             let out = self.buffer.push(measurement.clone());
             let mut smoothed_quaternion = self.aggregate.inner();
             smoothed_quaternion =

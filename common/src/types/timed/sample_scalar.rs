@@ -13,7 +13,7 @@ use crate::types::untimed::Scalar;
 /// let measurement =1.0;
 /// let sample = SampleScalar::new(timestamp, measurement);
 ///
-/// assert_eq!(sample.get_timestamp(), timestamp);
+/// assert_eq!(sample.get_timestamp_secs(), timestamp);
 /// assert_eq!(sample.get_measurement(), Scalar::from(measurement));
 /// ```
 
@@ -49,7 +49,7 @@ impl IMUSample for SampleScalar {
         self.measurement.clone()
     }
 
-    fn get_timestamp(&self) -> f64 {
+    fn get_timestamp_secs(&self) -> f64 {
         self.timestamp
     }
 
