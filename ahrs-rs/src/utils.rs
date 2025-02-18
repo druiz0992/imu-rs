@@ -5,7 +5,7 @@ use common::types::sensors::SensorType;
 
 use crate::{ahrs::buffer::SensorIndex, ahrs::buffer::N_SENSORS, AHRSInputSamples};
 
-pub(crate) fn check_sensor_cluster(sensor_cluster: &[SensorType; 3]) -> bool {
+pub(crate) fn check_sensor_cluster(sensor_cluster: &[SensorType; N_SENSORS]) -> bool {
     let mut has_accelerometer = false;
     let mut has_gyro = false;
     let mut has_magnetometer = false;

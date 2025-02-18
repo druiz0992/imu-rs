@@ -84,11 +84,11 @@ where
     T: Send + Sync + IMUReadings<S>,
     S: Send + Sync + IMUSample,
 {
-    async fn attach_listener(
+    async fn attach_listeners(
         &self,
         source: &dyn IMUSource<T, S>,
-        sensor_type: &SensorType,
-    ) -> Result<Uuid, String>;
+        sensor_cluster: &[SensorType],
+    ) -> Result<Vec<Uuid>, String>;
     async fn detach_listener(&self, source: &dyn IMUSource<T, S>, id: Uuid) {
         source.unregister_listener(id).await;
     }

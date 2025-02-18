@@ -172,6 +172,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut samples = AHRSInputSamples::new();
+        assert_eq!(samples.ready, [false; N_SENSORS]);
         for i in 0..N_SENSORS {
             samples.ready[i] = true;
         }

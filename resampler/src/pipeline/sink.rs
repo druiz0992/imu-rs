@@ -18,13 +18,21 @@ where
     Average<S::Untimed>: IMUFilter<S>,
     WeightedAverage<S::Untimed>: IMUFilter<S>,
 {
-    async fn attach_listener(
+    async fn attach_listeners(
         &self,
         source: &dyn IMUSource<T, S>,
-        sensor_type: &SensorType,
-    ) -> Result<Uuid, String> {
+        sensor_cluster: &[SensorType],
+    ) -> Result<Vec<Uuid>, String> {
         let mut listener = listener!(self.process_samples);
-        source.register_listener(&mut listener, sensor_type).await
+        let mut ids = Vec::with_capacity(sensor_cluster.len());
+        for sensor_type in sensor_cluster {
+            if let Ok(id) = source.register_listener(&mut listener, sensor_type).await {
+                ids.push(id);
+            } else {
+                return Err("Incorrect sensor".to_string());
+            }
+        }
+        Ok(ids)
     }
 
     async fn process_samples(&self, _listener_id: Uuid, samples: Arc<T>) {
@@ -32,12 +40,6 @@ where
         if let Some(mutex) = self.buffer.get(&sensor_type) {
             let mut data = mutex.lock().await;
             data.extend(samples.get_samples());
-            println!(
-                "Resampler received samples: sensor: {:?}, time{}, n_samples {} ",
-                sensor_type,
-                common::types::clock::Clock::now().as_secs(),
-                samples.get_samples().len()
-            );
         }
     }
 }

@@ -24,8 +24,8 @@ pub fn run<T, S>(
     resampling_policy: SmothingPolicy,
 ) -> (tokio::task::JoinHandle<()>, Arc<ResamplerPipeline<T, S>>)
 where
-    S: IMUSample,
-    T: Send + Sync + IMUReadings<S> + 'static,
+    S: IMUSample + std::fmt::Debug,
+    T: Send + Sync + IMUReadings<S> + std::fmt::Debug + 'static,
     S::Untimed: IMUUntimedSample,
     Average<S::Untimed>: IMUFilter<S>,
     WeightedAverage<S::Untimed>: IMUFilter<S>,

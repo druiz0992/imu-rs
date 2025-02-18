@@ -17,8 +17,15 @@ impl Timestamp {
         self.current_timestamp
     }
 
-    pub(super) fn incr_current_timestamp(&mut self, incr: f64) {
-        self.current_timestamp += incr;
+    pub(super) fn set_current_timestamp(&mut self, new_timestamp: f64) {
+        self.current_timestamp = new_timestamp;
+    }
+
+    pub(super) fn update_all(&mut self, new_timestamp: f64) {
+        self.set_current_timestamp(new_timestamp);
+        for i in 0..self.readings_timestamp.len() {
+            self.set_reading_timestamp(i, new_timestamp);
+        }
     }
 
     pub(super) fn get_reading_timestamp(&self, idx: usize) -> f64 {
@@ -40,15 +47,6 @@ mod tests {
         for i in 0..N_SENSORS {
             assert_eq!(timestamp.get_reading_timestamp(i), 0f64);
         }
-    }
-
-    #[test]
-    fn test_incr_current_timestamp() {
-        let mut timestamp = Timestamp::new();
-        timestamp.incr_current_timestamp(1.23);
-        assert_eq!(timestamp.get_current_timestamp(), 1.23);
-        timestamp.incr_current_timestamp(0.77);
-        assert_eq!(timestamp.get_current_timestamp(), 2.0);
     }
 
     #[test]

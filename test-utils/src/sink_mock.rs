@@ -4,14 +4,13 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use common::traits::{IMUSink, IMUSource};
+use common::traits::{IMUSample, IMUSink, IMUSource};
 use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::Sample3D;
 use publisher::listener;
 use publisher::Listener;
 
-type MockCallback =
-    Arc<Option<Arc<dyn Fn(MockValue, SensorType, Arc<SensorReadings<Sample3D>>) + Send + Sync>>>;
+type MockCallback<T> =
+    Arc<Option<Arc<dyn Fn(MockValue, SensorType, Arc<SensorReadings<T>>) + Send + Sync>>>;
 
 #[derive(Clone)]
 pub enum MockValue {
@@ -26,13 +25,16 @@ impl Default for MockValue {
     }
 }
 #[derive(Clone, Default)]
-pub struct SinkMock {
+pub struct SinkMock<T> {
     control: Arc<RwLock<HashMap<Uuid, SensorType>>>,
-    callback: MockCallback,
+    callback: MockCallback<T>,
     value: MockValue,
 }
 
-impl SinkMock {
+impl<T> SinkMock<T>
+where
+    T: IMUSample,
+{
     pub fn new() -> Self {
         Self {
             control: Arc::new(RwLock::new(HashMap::new())),
@@ -43,7 +45,7 @@ impl SinkMock {
 
     pub fn register_callback<F>(&mut self, callback: F)
     where
-        F: Fn(MockValue, SensorType, Arc<SensorReadings<Sample3D>>) + Send + Sync + 'static,
+        F: Fn(MockValue, SensorType, Arc<SensorReadings<T>>) + Send + Sync + 'static,
     {
         self.callback = Arc::new(Some(Arc::new(callback)));
     }
@@ -54,33 +56,36 @@ impl SinkMock {
 }
 
 #[async_trait]
-impl IMUSink<SensorReadings<Sample3D>, Sample3D> for SinkMock {
-    async fn attach_listener(
+impl<T> IMUSink<SensorReadings<T>, T> for SinkMock<T>
+where
+    T: IMUSample,
+{
+    async fn attach_listeners(
         &self,
-        source: &dyn IMUSource<SensorReadings<Sample3D>, Sample3D>,
-        sensor_type: &SensorType,
-    ) -> Result<Uuid, String> {
+        source: &dyn IMUSource<SensorReadings<T>, T>,
+        sensor_cluster: &[SensorType],
+    ) -> Result<Vec<Uuid>, String> {
         let mut listener = listener!(self.process_samples);
-        match source.register_listener(&mut listener, sensor_type).await {
-            Ok(id) => {
-                let mut control = self.control.write().await;
-                control.insert(id, sensor_type.clone());
-                Ok(id)
+        let mut ids = Vec::with_capacity(sensor_cluster.len());
+        for sensor_type in sensor_cluster {
+            match source.register_listener(&mut listener, sensor_type).await {
+                Ok(id) => {
+                    let mut control = self.control.write().await;
+                    control.insert(id, sensor_type.clone());
+                    ids.push(id);
+                }
+                Err(e) => return Err(e),
             }
-            Err(e) => Err(e),
         }
+        return Ok(ids);
     }
-    async fn detach_listener(
-        &self,
-        source: &dyn IMUSource<SensorReadings<Sample3D>, Sample3D>,
-        id: Uuid,
-    ) {
+    async fn detach_listener(&self, source: &dyn IMUSource<SensorReadings<T>, T>, id: Uuid) {
         source.unregister_listener(id).await;
         let mut control = self.control.write().await;
         control.remove_entry(&id);
     }
 
-    async fn process_samples(&self, id: Uuid, samples: Arc<SensorReadings<Sample3D>>) {
+    async fn process_samples(&self, id: Uuid, samples: Arc<SensorReadings<T>>) {
         let control = self.control.read().await;
         if let Some(sensor_type) = control.get(&id) {
             if let Some(cb) = self.callback.as_ref() {
@@ -90,7 +95,7 @@ impl IMUSink<SensorReadings<Sample3D>, Sample3D> for SinkMock {
     }
 }
 
-impl std::fmt::Debug for SinkMock {
+impl<T> std::fmt::Debug for SinkMock<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SinkMock")
             .field("control", &self.control)

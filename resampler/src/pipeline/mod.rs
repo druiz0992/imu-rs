@@ -35,8 +35,8 @@ pub struct ResamplerPipeline<T, S> {
 
 impl<T, S> ResamplerPipeline<T, S>
 where
-    S: IMUSample,
-    T: Send + Sync + IMUReadings<S> + 'static,
+    S: IMUSample + std::fmt::Debug,
+    T: Send + Sync + IMUReadings<S> + std::fmt::Debug + 'static,
     S::Untimed: IMUUntimedSample,
     Average<S::Untimed>: IMUFilter<S>,
     WeightedAverage<S::Untimed>: IMUFilter<S>,
@@ -59,12 +59,6 @@ where
     pub async fn collect_samples(&self, buffering_timestamp_secs: f64) -> Vec<T> {
         let mut buffer_clone = utils::clone_and_clear(self.buffer.clone()).await;
         for sensor_buffer in buffer_clone.iter_mut() {
-            println!(
-                "Resampler processing samples: sensor: {:?}, time{}, n_samples {} ",
-                sensor_buffer.get_sensor_type(),
-                buffering_timestamp_secs,
-                sensor_buffer.get_samples().len()
-            );
             utils::collect_samples(sensor_buffer, buffering_timestamp_secs).await;
         }
 
@@ -89,10 +83,10 @@ where
         let resampling_period_secs = resampling_period_millis / 1000.0;
         let mut resampler = Resampler::<S, S::Untimed>::new(&self.sensor_cluster, resample_policy);
         let resampling_duration_secs = Duration::from_secs_f64(resampling_period_secs);
-        let mut resampling_cycles = 1;
+        let mut processing_time = 0.0;
 
         loop {
-            sleep(resampling_duration_secs).await;
+            sleep(resampling_duration_secs - Duration::from_secs_f64(processing_time)).await;
             let timestamp_now_secs = Clock::now().as_secs();
             let max_sample_age =
                 resampling_buffering_factor as f64 * resampling_duration_secs.as_secs_f64();
@@ -100,19 +94,17 @@ where
             let resample_timestamp = timestamp_now_secs - max_sample_age / 2.0;
 
             // collect samples every buffering period = resampling_period * buffering_factor.
-            if resampling_buffering_factor == 0
-                || resampling_cycles % resampling_buffering_factor == 0
-            {
+            if buffering_timestamp > resampler.peek_newest_timestamp() {
                 // raw samples are samples collected by imu source with timestamp after buffering timestamp
                 let raw_samples = self.collect_samples(buffering_timestamp).await;
 
                 // smooth collected samples and add timestamp
                 resampler.buffer_samples(raw_samples, resample_timestamp);
             }
-            let processed_samples = resampler.interpolate(timestamp_now_secs);
+            let processed_samples = resampler.interpolate(buffering_timestamp);
 
             self.notify(processed_samples).await;
-            resampling_cycles += 1;
+            processing_time = Clock::now().as_secs() - timestamp_now_secs;
         }
     }
 }

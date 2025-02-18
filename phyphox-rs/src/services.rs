@@ -147,8 +147,7 @@ pub fn run_service(
 pub fn run_mock_service(
     sensor_cluster_tag: &str,
     sensor_cluster: Vec<SensorType>,
-    update_period_millis: u64,
-    capture_sampling_period_millis: u64,
+    update_period_millis: f64,
     add_sensor_noise: bool,
     run_for_millis: u64,
 ) -> Result<
@@ -161,7 +160,7 @@ pub fn run_mock_service(
     let phyphox = PhyphoxMock::new(
         sensor_cluster_tag,
         sensor_cluster,
-        capture_sampling_period_millis,
+        update_period_millis,
         add_sensor_noise,
     )?;
     let phyphox_service: Arc<PhyphoxService<PhyphoxMock>> = Arc::new(PhyphoxService::new(phyphox));
@@ -170,7 +169,7 @@ pub fn run_mock_service(
         async move {
             if let Err(e) = phyphox_service_clone
                 .start(
-                    Duration::from_millis(update_period_millis),
+                    Duration::from_secs_f64(update_period_millis / 1000.0),
                     None,
                     Some(run_for_millis),
                 )
@@ -208,7 +207,7 @@ mod tests {
             SensorType::Gyroscope(Uuid::new_v4()),
             SensorType::Magnetometer(Uuid::new_v4()),
         ];
-        let client = PhyphoxMock::new("Test", sensor_cluster, 10, false)
+        let client = PhyphoxMock::new("Test", sensor_cluster, 100.0, false)
             .expect("Error creating Phyphox instance");
         let client_service = Arc::new(PhyphoxService::new(client));
 
@@ -226,8 +225,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_mock_service() {
         let sensor_tag = "Test";
-        let update_period_millis = 100;
-        let capture_sampling_period_millis = 5;
+        let update_period_millis = 100.0;
         let add_sensor_noise = false;
         let run_for_millis = 1000;
         let sensor_cluster = vec![
@@ -239,7 +237,6 @@ mod tests {
             sensor_tag,
             sensor_cluster,
             update_period_millis,
-            capture_sampling_period_millis,
             add_sensor_noise,
             run_for_millis,
         )
