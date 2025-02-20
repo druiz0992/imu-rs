@@ -58,6 +58,32 @@ where
 
     pub async fn collect_samples(&self, buffering_timestamp_secs: f64) -> Vec<T> {
         let mut buffer_clone = utils::clone_and_clear(self.buffer.clone()).await;
+        println!("RECE SAM: {}, {:?}", buffering_timestamp_secs, buffer_clone);
+        /*
+        for readings in &buffer_clone {
+            match readings.get_sensor_type() {
+                SensorType::Accelerometer(_) => {
+                    let m = readings.get_samples();
+                    let min = m.iter().min_by(|a, b| {
+                        a.get_timestamp_secs()
+                            .partial_cmp(&b.get_timestamp_secs())
+                            .unwrap()
+                    });
+                    let max = m.iter().max_by(|a, b| {
+                        a.get_timestamp_secs()
+                            .partial_cmp(&b.get_timestamp_secs())
+                            .unwrap()
+                    });
+                    let n = m.len();
+                    println!(
+                        "buffering timestamp: {}, n: {}, min: {:?}, max: {:?}",
+                        buffering_timestamp_secs, n, min, max
+                    );
+                }
+                _ => (),
+            }
+        }
+        */
         for sensor_buffer in buffer_clone.iter_mut() {
             utils::collect_samples(sensor_buffer, buffering_timestamp_secs).await;
         }
@@ -86,7 +112,12 @@ where
         let mut processing_time = 0.0;
 
         loop {
-            sleep(resampling_duration_secs - Duration::from_secs_f64(processing_time)).await;
+            sleep(resampling_duration_secs).await;
+            //sleep(
+            //resampling_duration_secs
+            //- Duration::from_secs_f64(f64::min(processing_time, resampling_period_secs)),
+            //)
+            //.await;
             let timestamp_now_secs = Clock::now().as_secs();
             let max_sample_age =
                 resampling_buffering_factor as f64 * resampling_duration_secs.as_secs_f64();
@@ -97,6 +128,7 @@ where
             if buffering_timestamp > resampler.peek_newest_timestamp() {
                 // raw samples are samples collected by imu source with timestamp after buffering timestamp
                 let raw_samples = self.collect_samples(buffering_timestamp).await;
+                println!("CLLECTED: {:?}", raw_samples);
 
                 // smooth collected samples and add timestamp
                 resampler.buffer_samples(raw_samples, resample_timestamp);

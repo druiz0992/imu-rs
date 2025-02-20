@@ -21,7 +21,7 @@ pub fn run<T, S>(
     sensor_cluster: Vec<SensorType>,
     resampling_period_millis: f64,
     resamping_buffer_factor: u32,
-    resampling_policy: SmothingPolicy,
+    smoothing_policy: SmothingPolicy,
 ) -> (tokio::task::JoinHandle<()>, Arc<ResamplerPipeline<T, S>>)
 where
     S: IMUSample + std::fmt::Debug,
@@ -38,7 +38,7 @@ where
         async move {
             if let Err(e) = pipeline_clone
                 .start(
-                    resampling_policy,
+                    smoothing_policy,
                     resampling_period_millis,
                     resamping_buffer_factor,
                 )

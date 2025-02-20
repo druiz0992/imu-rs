@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use rand::{rngs::StdRng, SeedableRng};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -45,7 +46,10 @@ impl PhyphoxMock {
         update_period_millis: f64,
         add_sensor_noise: bool,
     ) -> Result<Self, PhyphoxError> {
-        let test_data = "../test-utils/test_data/sensor_readings.csv";
+        let test_data = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../test-utils/test_data/sensor_readings.csv");
+        let test_data = test_data.to_str().unwrap();
+
         let mut gyro_mapper = CsvColumnMapper::new();
         gyro_mapper.add_timestamp().add_gyro();
         let gyro_readings = CircularReader::try_from(
@@ -143,7 +147,6 @@ impl PhyphoxPort for PhyphoxMock {
         &self,
         period_millis: Duration,
         abort_signal: Option<Arc<Notify>>,
-        _window_size: Option<usize>,
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
@@ -238,7 +241,7 @@ mod tests {
 
         let start_handle = tokio::spawn(async move {
             phyphox_mock_clone
-                .start(period, Some(abort_signal), None, None)
+                .start(period, Some(abort_signal), None)
                 .await
                 .unwrap();
         });

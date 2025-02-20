@@ -10,7 +10,7 @@ use common::types::sensors::sensor_type;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use common::types::Clock;
-use test_utils::sink_mock::{MockValue, SinkMock};
+use test_utils::sinks::{MockValue, SinkMock};
 
 fn process_samples(
     value: MockValue,

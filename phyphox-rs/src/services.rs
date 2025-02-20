@@ -49,7 +49,6 @@ where
     pub async fn start(
         &self,
         period_millis: Duration,
-        window_size: Option<usize>,
         run_for_millis: Option<u64>,
     ) -> Result<(), PhyphoxError> {
         let abort_signal = self.abort_signal.clone();
@@ -59,10 +58,16 @@ where
             .start(
                 period_millis,
                 Some(self.abort_signal.clone()),
-                window_size,
                 Some(publishers),
             )
             .await
+    }
+
+    pub fn stop(&self) {
+        println!("STOPA;");
+        while true {
+            self.abort_signal.notify_waiters();
+        }
     }
 }
 
@@ -113,8 +118,7 @@ pub fn run_service(
     base_url: &str,
     sensor_cluster_tag: &str,
     sensor_cluster: Vec<SensorType>,
-    update_period_millis: u64,
-    window_size: Option<usize>,
+    update_period_millis: f64,
 ) -> Result<(tokio::task::JoinHandle<()>, Arc<PhyphoxService<Phyphox>>), PhyphoxError> {
     let phyphox = Phyphox::new(base_url, sensor_cluster_tag, sensor_cluster)?;
     let phyphox_service: Arc<PhyphoxService<Phyphox>> = Arc::new(PhyphoxService::new(phyphox));
@@ -124,8 +128,7 @@ pub fn run_service(
         async move {
             if let Err(e) = phyphox_service_clone
                 .start(
-                    Duration::from_millis(update_period_millis),
-                    window_size,
+                    Duration::from_secs_f64(update_period_millis / 1000.0),
                     None, // run until ctrl-c signal
                 )
                 .await
@@ -170,7 +173,6 @@ pub fn run_mock_service(
             if let Err(e) = phyphox_service_clone
                 .start(
                     Duration::from_secs_f64(update_period_millis / 1000.0),
-                    None,
                     Some(run_for_millis),
                 )
                 .await
@@ -214,7 +216,7 @@ mod tests {
         let client_service_clone = Arc::clone(&client_service);
         let start_task = tokio::task::spawn(async move {
             client_service_clone
-                .start(Duration::from_millis(1000), None, Some(1000))
+                .start(Duration::from_millis(1000), Some(1000))
                 .await
                 .unwrap();
         });

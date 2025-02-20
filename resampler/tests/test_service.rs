@@ -7,7 +7,7 @@ use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use phyphox_rs::services;
 use resampler_rs::SmothingPolicy;
-use test_utils::sink_mock::{MockValue, SinkMock};
+use test_utils::sinks::{MockValue, SinkMock};
 use tokio::time::Duration;
 
 fn process_samples(

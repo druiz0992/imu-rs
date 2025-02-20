@@ -41,9 +41,20 @@ pub(crate) fn control_str(
     }
 }
 
-pub(crate) fn update_measurement_time(data: &[f64], timestamp: &mut f64) {
+pub(crate) fn update_measurement_time(data: &[f64], timestamp: &mut f64, offset: f64) {
     if let Some(last_row) = data.last() {
-        *timestamp = last_row + EPS_MEASUREMENT_TIME;
+        /*
+        println!(
+            "LAST ROW: {:?}, {}, {}",
+            last_row,
+            offset,
+            (last_row - offset) * 1000.0
+        );
+        */
+        //*timestamp = (last_row - offset) * 1000.0 + EPS_MEASUREMENT_TIME;
+        //*timestamp = last_row + EPS_MEASUREMENT_TIME;
+        *timestamp = last_row - offset + EPS_MEASUREMENT_TIME;
+        //*timestamp = last_row + EPS_MEASUREMENT_TIME;
     }
 }
 
@@ -114,8 +125,12 @@ pub(crate) fn combine_results(
             .collect();
 
         if let Ok(xyz) = XYZ::try_from(values) {
-            untimed_data.push(xyz);
-            timestamp.push(results[0][row] / 1000.0 + timestamp_at_boot_secs);
+            if let Some(t) = results[0].get(row) {
+                untimed_data.push(xyz);
+                timestamp.push(t + timestamp_at_boot_secs);
+                //timestamp.push(*t);
+            }
+            //timestamp.push(results[0][row]);
         }
     }
     (timestamp, untimed_data)
@@ -209,7 +224,7 @@ mod tests {
     #[test]
     fn test_update_measurement_time() {
         let mut timestamp = 0.0;
-        update_measurement_time(&[1.0, 2.0, 3.0], &mut timestamp);
+        update_measurement_time(&[1.0, 2.0, 3.0], &mut timestamp, 0.0);
         assert_eq!(timestamp, 3.0 + EPS_MEASUREMENT_TIME);
     }
 
