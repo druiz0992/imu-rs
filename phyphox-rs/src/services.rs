@@ -62,13 +62,6 @@ where
             )
             .await
     }
-
-    pub fn stop(&self) {
-        println!("STOPA;");
-        while true {
-            self.abort_signal.notify_waiters();
-        }
-    }
 }
 
 #[async_trait]

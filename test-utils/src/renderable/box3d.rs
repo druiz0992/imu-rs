@@ -6,7 +6,7 @@ use nalgebra::{Quaternion, Vector3};
 const N_BOX_VERTICES: usize = 8;
 const N_BOX_EDGES: usize = 12;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Edge(usize, usize);
 
 impl Edge {
@@ -31,7 +31,7 @@ impl Vertex {
     fn z(&self) -> f64 {
         self.0.z
     }
-    fn to_vector3(&self) -> Vector3<f64> {
+    fn to_vector3(self) -> Vector3<f64> {
         self.0
     }
 }
@@ -52,7 +52,7 @@ fn box_edges() -> [Edge; N_BOX_EDGES] {
         Edge::new(3, 7),
     ]
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Box3D {
     vertices: [Vertex; N_BOX_VERTICES],
     edges: [Edge; N_BOX_EDGES],

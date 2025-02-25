@@ -6,7 +6,6 @@ use uuid::Uuid;
 
 use super::ResamplerPipeline;
 use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSink, IMUSource};
-use common::types::clock::Clock;
 use common::types::filters::Average;
 use common::types::filters::WeightedAverage;
 use common::types::sensors::SensorType;
@@ -41,33 +40,6 @@ where
         if let Some(mutex) = self.buffer.get(&sensor_type) {
             let mut data = mutex.lock().await;
             data.extend(samples.get_samples());
-
-            /*
-            match sensor_type {
-                SensorType::Accelerometer(_) => {
-                    let m = samples.get_samples();
-                    let min = m.iter().min_by(|a, b| {
-                        a.get_timestamp_secs()
-                            .partial_cmp(&b.get_timestamp_secs())
-                            .unwrap()
-                    });
-                    let max = m.iter().max_by(|a, b| {
-                        a.get_timestamp_secs()
-                            .partial_cmp(&b.get_timestamp_secs())
-                            .unwrap()
-                    });
-                    let n = m.len();
-                    println!(
-                        "Samples received. Timestamp: {}, n: {}, min: {:?}, max: {:?}",
-                        Clock::now().as_secs(),
-                        n,
-                        min,
-                        max
-                    );
-                }
-                _ => (),
-            }
-            */
         }
     }
 }

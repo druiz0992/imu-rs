@@ -16,16 +16,16 @@ async fn main() {
         SensorType::Magnetometer(Uuid::new_v4()),
     ];
 
-    let plot_refresh_period_millis = 40;
+    let plot_refresh_period_millis = 200.0;
     let plot_window_size_samples = 200;
-    let plot_1d = Plot1D::new(sensor_cluster.clone(), plot_window_size_samples).await;
+    let plot_1d = Plot1D::new("Raw", sensor_cluster.clone(), plot_window_size_samples).await;
     plot_1d.start(plot_refresh_period_millis);
 
     let tag = "Test";
 
     // Start phyphox  service
     let (handle_phyphox, phyphox) =
-        phyphox_rs::run_service("http://192.168.1.34", tag, sensor_cluster.clone(), 100.0).unwrap();
+        phyphox_rs::run_service("http://192.168.1.34", tag, sensor_cluster.clone(), 400.0).unwrap();
 
     IMUSink::<SensorReadings<Sample3D>, Sample3D>::attach_listeners(
         &plot_1d,

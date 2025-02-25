@@ -4,7 +4,7 @@ use gnuplot::{AxesCommon, Caption, Color, Figure};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -30,16 +30,18 @@ pub struct PlotManager {
     start_time: f64,
     sensor_cluster: Vec<SensorType>,
     window_size: usize,
+    tag: String,
 }
 
 impl PlotManager {
-    pub fn new(sensor_cluster: Vec<SensorType>, window_size: usize) -> Arc<Mutex<Self>> {
+    pub fn new(tag: &str, sensor_cluster: Vec<SensorType>, window_size: usize) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             figure: HashMap::new(),
             sensor_cluster,
             plots: HashMap::new(),
             start_time: Clock::now().as_secs(),
             window_size,
+            tag: tag.to_string(),
         }))
     }
 
@@ -76,7 +78,7 @@ impl PlotManager {
                 if let Some(figure) = self.figure.get_mut(sensor_type) {
                     figure.clear_axes();
                     let axes = figure.axes2d();
-                    axes.set_title(&format!("{:?}", sensor_type), &[]);
+                    axes.set_title(&format!("{} - {:?}", self.tag, sensor_type), &[]);
                     axes.set_x_label("Time (ms)", &[]);
                     axes.set_y_label("Measurements", &[]);
 
@@ -107,8 +109,8 @@ impl PlotManager {
 pub struct Plot1D(Arc<Mutex<PlotManager>>);
 
 impl Plot1D {
-    pub async fn new(sensor_cluster: Vec<SensorType>, window_size: usize) -> Self {
-        let pm = PlotManager::new(sensor_cluster.clone(), window_size);
+    pub async fn new(tag: &str, sensor_cluster: Vec<SensorType>, window_size: usize) -> Self {
+        let pm = PlotManager::new(tag, sensor_cluster.clone(), window_size);
         let mut pm_locked = pm.lock().await;
 
         for sensor_type in &sensor_cluster {
@@ -120,14 +122,25 @@ impl Plot1D {
         Self(pm)
     }
 
-    pub fn start(&self, refresh_period_millis: u64) {
+    pub fn start(&self, refresh_period_millis: f64) {
         let plot_manager = Arc::clone(&self.0);
-        std::thread::spawn(move || loop {
-            let mut plot = plot_manager.blocking_lock();
-            plot.update();
-            drop(plot);
+        std::thread::spawn(move || {
+            let period = Duration::from_secs_f64(refresh_period_millis / 1000.0);
+            loop {
+                let start_time = Instant::now();
+                let mut plot = plot_manager.blocking_lock();
+                plot.update();
+                drop(plot);
 
-            thread::sleep(Duration::from_millis(refresh_period_millis));
+                let elapsed_time = start_time.elapsed();
+                let sleep_time = if elapsed_time < period {
+                    period - elapsed_time
+                } else {
+                    Duration::new(0, 0)
+                };
+
+                thread::sleep(sleep_time);
+            }
         });
     }
 }

@@ -66,9 +66,9 @@ where
 
         for &(i, j) in edges.iter() {
             ax.lines(
-                &[vertices[i].0, vertices[j].0],
-                &[vertices[i].1, vertices[j].1],
-                &[vertices[i].2, vertices[j].2],
+                [vertices[i].0, vertices[j].0],
+                [vertices[i].1, vertices[j].1],
+                [vertices[i].2, vertices[j].2],
                 &[Color("blue")],
             );
         }

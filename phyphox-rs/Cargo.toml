@@ -15,6 +15,7 @@ serde = {version = "1.0.192", features = ["derive"]}
 serde_json = "1.0.108"
 rand = "0.8"
 rand_distr = "0.4"
+futures = "0.3.31"
 
 publisher = { path = "../publisher"}
 common = { path = "../common"}

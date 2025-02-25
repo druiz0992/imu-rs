@@ -50,13 +50,13 @@ async fn test_resampler_pipeline() {
 
     // start resampler
     let resampling_period_millis = 10.0;
-    let resampling_buffer_factor = 10;
+    let resampling_delay_millis = 200.0;
     let resampling_policy = SmothingPolicy::WeightedAverage;
-    let (handle_resampler, resampler) = run::<SensorReadings<Sample3D>, _>(
+    let (_handle_resampler, resampler) = run::<SensorReadings<Sample3D>, _>(
         sensor_tag,
         sensor_cluster.clone(),
         resampling_period_millis,
-        resampling_buffer_factor,
+        resampling_delay_millis,
         resampling_policy,
     );
 
@@ -79,7 +79,6 @@ async fn test_resampler_pipeline() {
     // Use timeout to abort test after 5 seconds
     let _ = tokio::time::timeout(timeout_duration, async {
         // Await for both services to finish
-        handle_resampler.await.unwrap();
         handle_phyphox.await.unwrap();
     })
     .await;
