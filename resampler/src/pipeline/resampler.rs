@@ -24,11 +24,12 @@ where
 {
     interpolator: Cache<T, U>,
     policy: SmothingPolicy,
+    sensor_cluster: Vec<SensorType>,
 }
 
 impl<T, U> Resampler<T, U>
 where
-    T: IMUSample,
+    T: IMUSample + std::fmt::Debug,
     T: IMUSample<Untimed = U>,
     U: IMUUntimedSample,
 {
@@ -36,6 +37,7 @@ where
         Self {
             policy,
             interpolator: Cache::new(sensor_cluster),
+            sensor_cluster: sensor_cluster.to_vec().clone(),
         }
     }
 
@@ -62,11 +64,16 @@ where
                 ),
                 Some(sample) => sample,
             };
-
             // Insert the processed sample into cache
             self.interpolator
                 .push(&sensor_type, resampled_samples.clone());
         }
+    }
+
+    pub(crate) fn peek_newest_timestamp(&self) -> f64 {
+        self.interpolator
+            .peek_newest_timestamp(&self.sensor_cluster[0])
+            .unwrap()
     }
 
     fn smoothing<R>(&self, imu_samples: &R, sample_time: f64) -> Option<T>

@@ -57,7 +57,14 @@ impl<T: IMUUntimedSample> MovingAverage<T> {
 /// General implementation of IMUFIlter for samples that implement `BasicArithmetic` trait
 impl<T, U> IMUFilter<U> for MovingAverage<T>
 where
-    T: IMUUntimedSample + BasicArithmetic + Default + Send + Sync + 'static + Clone,
+    T: IMUUntimedSample
+        + BasicArithmetic
+        + Default
+        + Send
+        + Sync
+        + 'static
+        + Clone
+        + std::fmt::Debug,
     U: IMUSample<Untimed = T>,
 {
     /// Filters a batch of IMU samples using the moving average filter.
@@ -66,7 +73,6 @@ where
             return Err("No samples to filter");
         }
         let mut filtered_data: Vec<U> = Vec::with_capacity(samples.len());
-        self.aggregate = T::default();
         for sample in samples {
             let measurement = sample.get_measurement();
             let timestamp = sample.get_timestamp_secs();
@@ -106,9 +112,10 @@ where
                 smoothed_quaternion.slerp(&out.inner().inverse(), 1.0 / self.window_size);
             smoothed_quaternion =
                 smoothed_quaternion.slerp(&measurement.inner(), 1.0 / self.window_size);
+            self.aggregate = UnitQuaternion::from_unit_quaternion(smoothed_quaternion);
             filtered_data.push(SampleQuaternion::from_measurement(
                 timestamp,
-                UnitQuaternion::from_unit_quaternion(smoothed_quaternion),
+                self.aggregate.clone(),
             ));
         }
         Ok(filtered_data)

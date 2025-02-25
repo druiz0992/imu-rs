@@ -18,7 +18,6 @@ pub trait PhyphoxPort {
         &self,
         period_millis: Duration,
         abort_signal: Option<Arc<Notify>>,
-        window_size: Option<usize>,
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError>;
 

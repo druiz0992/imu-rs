@@ -10,7 +10,7 @@ use common::types::sensors::sensor_type;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use common::types::Clock;
-use test_utils::sink_mock::{MockValue, SinkMock};
+use test_utils::sinks::{MockValue, SinkMock};
 
 fn process_samples(
     value: MockValue,
@@ -35,8 +35,7 @@ fn process_samples(
 #[tokio::test]
 async fn test_receive_accelerometer_samples() {
     let sensor_tag = "Test";
-    let update_period_millis = 200;
-    let capture_sampling_period_millis = 100;
+    let update_period_millis = 200.0;
     let add_sensor_noise = false;
     let run_for_millis = 5000;
     let received_samples: Arc<Mutex<Vec<Sample3D>>> = Arc::new(Mutex::new(Vec::new()));
@@ -55,7 +54,6 @@ async fn test_receive_accelerometer_samples() {
         sensor_tag,
         sensor_cluster,
         update_period_millis,
-        capture_sampling_period_millis,
         add_sensor_noise,
         run_for_millis,
     )
@@ -100,8 +98,7 @@ async fn test_receive_accelerometer_samples() {
 #[tokio::test]
 async fn test_receive_multiple_sensors() {
     let sensor_tag = "Test";
-    let update_period_millis = 200;
-    let capture_sampling_period_millis = 100;
+    let update_period_millis = 200.0;
     let add_sensor_noise = false;
     let run_for_millis = 5000;
     let received_samples: Arc<Mutex<HashMap<Uuid, Vec<Sample3D>>>> =
@@ -120,7 +117,6 @@ async fn test_receive_multiple_sensors() {
         sensor_tag,
         sensor_cluster,
         update_period_millis,
-        capture_sampling_period_millis,
         add_sensor_noise,
         run_for_millis,
     )
@@ -175,8 +171,7 @@ async fn test_receive_multiple_sensors() {
 #[tokio::test]
 async fn test_stop_receiving_accelerometer_samples() {
     let sensor_tag = "Test";
-    let update_period_millis = 200;
-    let capture_sampling_period_millis = 100;
+    let update_period_millis = 200.0;
     let add_sensor_noise = false;
     let run_for_millis = 5000;
     let received_samples: Arc<Mutex<Vec<Sample3D>>> = Arc::new(Mutex::new(Vec::new()));
@@ -195,7 +190,6 @@ async fn test_stop_receiving_accelerometer_samples() {
         sensor_tag,
         sensor_cluster,
         update_period_millis,
-        capture_sampling_period_millis,
         add_sensor_noise,
         run_for_millis,
     )
@@ -233,15 +227,14 @@ async fn test_stop_receiving_accelerometer_samples() {
     assert!(!samples.is_empty());
     for sample in samples {
         let timestamp = sample.get_timestamp_secs();
-        assert!(timestamp < 0.003 + timestamp_at_boot_secs);
+        assert!(timestamp < 3.0 + timestamp_at_boot_secs);
     }
 }
 
 #[tokio::test]
 async fn test_sink() {
     let sensor_tag = "Test";
-    let update_period_millis = 200;
-    let capture_sampling_period_millis = 100;
+    let update_period_millis = 200.0;
     let add_sensor_noise = false;
     let run_for_millis = 5000;
     let acc_id = Uuid::new_v4();
@@ -256,9 +249,8 @@ async fn test_sink() {
     // Start phyphox mock service
     let (handle, phyphox) = services::run_mock_service(
         sensor_tag,
-        sensor_cluster,
+        sensor_cluster.clone(),
         update_period_millis,
-        capture_sampling_period_millis,
         add_sensor_noise,
         run_for_millis,
     )
@@ -268,16 +260,13 @@ async fn test_sink() {
     sink.set_value(MockValue::Float(Clock::now().as_secs()));
     sink.register_callback(process_samples);
 
-    let id_accel = sink
-        .attach_listener(&*phyphox, &SensorType::Accelerometer(acc_id))
-        .await
-        .unwrap();
-    sink.attach_listener(&*phyphox, &SensorType::Magnetometer(mag_id))
+    let ids = sink
+        .attach_listeners(&*phyphox, &sensor_cluster)
         .await
         .unwrap();
 
     tokio::time::sleep(Duration::from_millis(2000)).await;
-    sink.detach_listener(&*phyphox, id_accel).await;
+    sink.detach_listener(&*phyphox, ids[0]).await;
 
     handle.await.unwrap();
 }

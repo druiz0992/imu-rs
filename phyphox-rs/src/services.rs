@@ -49,7 +49,6 @@ where
     pub async fn start(
         &self,
         period_millis: Duration,
-        window_size: Option<usize>,
         run_for_millis: Option<u64>,
     ) -> Result<(), PhyphoxError> {
         let abort_signal = self.abort_signal.clone();
@@ -59,7 +58,6 @@ where
             .start(
                 period_millis,
                 Some(self.abort_signal.clone()),
-                window_size,
                 Some(publishers),
             )
             .await
@@ -113,8 +111,7 @@ pub fn run_service(
     base_url: &str,
     sensor_cluster_tag: &str,
     sensor_cluster: Vec<SensorType>,
-    update_period_millis: u64,
-    window_size: Option<usize>,
+    update_period_millis: f64,
 ) -> Result<(tokio::task::JoinHandle<()>, Arc<PhyphoxService<Phyphox>>), PhyphoxError> {
     let phyphox = Phyphox::new(base_url, sensor_cluster_tag, sensor_cluster)?;
     let phyphox_service: Arc<PhyphoxService<Phyphox>> = Arc::new(PhyphoxService::new(phyphox));
@@ -124,8 +121,7 @@ pub fn run_service(
         async move {
             if let Err(e) = phyphox_service_clone
                 .start(
-                    Duration::from_millis(update_period_millis),
-                    window_size,
+                    Duration::from_secs_f64(update_period_millis / 1000.0),
                     None, // run until ctrl-c signal
                 )
                 .await
@@ -147,8 +143,7 @@ pub fn run_service(
 pub fn run_mock_service(
     sensor_cluster_tag: &str,
     sensor_cluster: Vec<SensorType>,
-    update_period_millis: u64,
-    capture_sampling_period_millis: u64,
+    update_period_millis: f64,
     add_sensor_noise: bool,
     run_for_millis: u64,
 ) -> Result<
@@ -161,7 +156,7 @@ pub fn run_mock_service(
     let phyphox = PhyphoxMock::new(
         sensor_cluster_tag,
         sensor_cluster,
-        capture_sampling_period_millis,
+        update_period_millis,
         add_sensor_noise,
     )?;
     let phyphox_service: Arc<PhyphoxService<PhyphoxMock>> = Arc::new(PhyphoxService::new(phyphox));
@@ -170,8 +165,7 @@ pub fn run_mock_service(
         async move {
             if let Err(e) = phyphox_service_clone
                 .start(
-                    Duration::from_millis(update_period_millis),
-                    None,
+                    Duration::from_secs_f64(update_period_millis / 1000.0),
                     Some(run_for_millis),
                 )
                 .await
@@ -208,14 +202,14 @@ mod tests {
             SensorType::Gyroscope(Uuid::new_v4()),
             SensorType::Magnetometer(Uuid::new_v4()),
         ];
-        let client = PhyphoxMock::new("Test", sensor_cluster, 10, false)
+        let client = PhyphoxMock::new("Test", sensor_cluster, 100.0, false)
             .expect("Error creating Phyphox instance");
         let client_service = Arc::new(PhyphoxService::new(client));
 
         let client_service_clone = Arc::clone(&client_service);
         let start_task = tokio::task::spawn(async move {
             client_service_clone
-                .start(Duration::from_millis(1000), None, Some(1000))
+                .start(Duration::from_millis(1000), Some(1000))
                 .await
                 .unwrap();
         });
@@ -226,8 +220,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_mock_service() {
         let sensor_tag = "Test";
-        let update_period_millis = 100;
-        let capture_sampling_period_millis = 5;
+        let update_period_millis = 100.0;
         let add_sensor_noise = false;
         let run_for_millis = 1000;
         let sensor_cluster = vec![
@@ -239,7 +232,6 @@ mod tests {
             sensor_tag,
             sensor_cluster,
             update_period_millis,
-            capture_sampling_period_millis,
             add_sensor_noise,
             run_for_millis,
         )

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use rand::{rngs::StdRng, SeedableRng};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -21,7 +22,6 @@ use publisher::{Publishable, Publisher};
 use test_utils::csv_loader::{self, CsvColumnMapper};
 
 const GAUSSIAN_TIME_MEAN: f64 = 0f64;
-const GAUSSIAN_TIME_STDEV: f64 = 0.005;
 const GAUSSIAN_SENSOR_MEAN: f64 = 0f64;
 const GAUSSIAN_SENSOR_STDEV: f64 = 0.5;
 const LSB_TIME_MASK: u8 = 0xC0;
@@ -31,7 +31,6 @@ const MAX_N_SAMPLES: u8 = 15;
 pub struct PhyphoxMock {
     readings: Mutex<[CircularReader<Sample3D>; N_SENSORS]>,
     timestamps: Mutex<Timestamp>,
-    capture_sampling_period_secs: f64,
     time_delta: GaussianNoise,
     sensor_noise: Option<GaussianNoise>,
     sensor_cluster_tag: String,
@@ -44,10 +43,13 @@ impl PhyphoxMock {
     pub(crate) fn new(
         sensor_cluster_tag: &str,
         sensor_cluster: Vec<SensorType>,
-        capture_sampling_period_millis: u64,
+        update_period_millis: f64,
         add_sensor_noise: bool,
     ) -> Result<Self, PhyphoxError> {
-        let test_data = "../test-utils/test_data/sensor_readings.csv";
+        let test_data = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../test-utils/test_data/sensor_readings.csv");
+        let test_data = test_data.to_str().unwrap();
+
         let mut gyro_mapper = CsvColumnMapper::new();
         gyro_mapper.add_timestamp().add_gyro();
         let gyro_readings = CircularReader::try_from(
@@ -63,7 +65,7 @@ impl PhyphoxMock {
         .map_err(PhyphoxError::Other)?;
 
         let mut mag_mapper = CsvColumnMapper::new();
-        mag_mapper.add_timestamp().add_accel();
+        mag_mapper.add_timestamp().add_mag();
         let mag_readings = CircularReader::try_from(
             csv_loader::load_csv_columns::<Sample3D>(test_data, &mag_mapper.columns()).unwrap(),
         )
@@ -78,47 +80,45 @@ impl PhyphoxMock {
             sensor_cluster_tag: sensor_cluster_tag.to_string(),
             readings,
             timestamps: Mutex::new(Timestamp::new()),
-            capture_sampling_period_secs: capture_sampling_period_millis as f64 / 1000.0,
-            time_delta: GaussianNoise::new(GAUSSIAN_TIME_MEAN, GAUSSIAN_TIME_STDEV),
+            time_delta: GaussianNoise::new(GAUSSIAN_TIME_MEAN, update_period_millis / 1000.0 * 0.2),
             sensor_noise: add_sensor_noise
                 .then(|| GaussianNoise::new(GAUSSIAN_SENSOR_MEAN, GAUSSIAN_SENSOR_STDEV)),
             sensor_cluster,
         })
     }
 
-    async fn get_next_samples(
-        &self,
-        buffer_idx: usize,
-        timestamp_at_boot_secs: f64,
-    ) -> Vec<Sample3D> {
+    async fn get_next_samples(&self, buffer_idx: usize) -> Vec<Sample3D> {
         let mut new_samples = Vec::new();
         let pending_samples = select_random_pending_samples();
         let mut rng = StdRng::from_entropy();
+        let mut timestamps = self.timestamps.lock().await;
+        let current_timestamp = timestamps.get_current_timestamp();
         if pending_samples > 0 {
             let mut readings = self.readings.lock().await;
-            let next_sample = readings[buffer_idx].next_element();
-            let mut timestamps = self.timestamps.lock().await;
             for _ in 0..pending_samples {
-                let sample_timestamp = self
+                let next_sample = readings[buffer_idx].next_element();
+                let mut sample_timestamp = self
                     .time_delta
                     .add_noise(&mut rng, timestamps.get_reading_timestamp(buffer_idx))
                     .abs();
-                if sample_timestamp < timestamps.get_current_timestamp() {
-                    timestamps.set_reading_timestamp(buffer_idx, sample_timestamp);
-                    let mut next_measurement: Vec<f64> = next_sample.get_measurement().into();
+                sample_timestamp = sample_timestamp.min(current_timestamp);
+                timestamps.set_reading_timestamp(buffer_idx, sample_timestamp);
+                let mut next_measurement: Vec<f64> = next_sample.get_measurement().into();
 
-                    if self.sensor_noise.is_some() {
-                        let rgen = self.sensor_noise.as_ref().unwrap();
-                        next_measurement = rgen.add_noise_vec(&mut rng, next_measurement);
-                    }
-                    let next_measurement: XYZ = XYZ::try_from(next_measurement).unwrap();
-                    new_samples.push(Sample3D::from_measurement(
-                        sample_timestamp / 1000.0 + timestamp_at_boot_secs,
-                        next_measurement,
-                    ))
-                } else {
-                    break;
+                if self.sensor_noise.is_some() {
+                    let rgen = self.sensor_noise.as_ref().unwrap();
+                    next_measurement = rgen.add_noise_vec(&mut rng, next_measurement);
                 }
+                let next_measurement: XYZ = XYZ::try_from(next_measurement).unwrap();
+                new_samples.push(Sample3D::from_measurement(
+                    sample_timestamp,
+                    next_measurement,
+                ));
+                new_samples.sort_by(|a, b| {
+                    a.get_timestamp_secs()
+                        .partial_cmp(&b.get_timestamp_secs())
+                        .unwrap()
+                });
             }
         }
         new_samples
@@ -147,37 +147,43 @@ impl PhyphoxPort for PhyphoxMock {
         &self,
         period_millis: Duration,
         abort_signal: Option<Arc<Notify>>,
-        _window_size: Option<usize>,
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
         let timestamp_at_boot_secs = Clock::now().as_secs();
+        {
+            let mut timestamp = self.timestamps.lock().await;
+            timestamp.update_all(timestamp_at_boot_secs);
+        }
         loop {
             tokio::select! {
-                    _ = abort_signal.notified() => {
-                        break;
-                    }
-                    _ = tokio::time::sleep(period_millis) => {
-                {
+                _ = abort_signal.notified() => {
+                    break;
+                }
+                _ = tokio::time::sleep(period_millis) => {
                     let mut timestamp = self.timestamps.lock().await;
-                    timestamp.incr_current_timestamp(self.capture_sampling_period_secs);
-                }
+                    timestamp.set_current_timestamp(Clock::now().as_secs());
+                    drop(timestamp);
 
-                for sensor in &self.sensor_cluster {
-                    let sensor_idx = match usize::from(sensor) {
-                        sensor_type::ACCELEROMETER_OFFSET..sensor_type::GYROSCOPE_OFFSET => 0,
-                        sensor_type::GYROSCOPE_OFFSET..sensor_type::MAGNETOMETER_OFFSET => 1,
-                        sensor_type::MAGNETOMETER_OFFSET..sensor_type::MAX_OFFSET => 2,
-                        _ => 2,
-                    };
-                    let samples = self.get_next_samples(sensor_idx, timestamp_at_boot_secs).await;
-                     println!("Phyphox sent samples: sensor: {:?}, time: {}, n_samples: {}", sensor, common::types::clock::Clock::now().as_secs(), samples.len());
-                    let buffer = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), samples);
-                    if let Some(publisher) = publisher.as_ref() {
-                        publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;
-                    };
+                    for sensor in &self.sensor_cluster {
+                        let sensor_idx = match usize::from(sensor) {
+                            sensor_type::ACCELEROMETER_OFFSET..sensor_type::GYROSCOPE_OFFSET => 0,
+                            sensor_type::GYROSCOPE_OFFSET..sensor_type::MAGNETOMETER_OFFSET => 1,
+                            sensor_type::MAGNETOMETER_OFFSET..sensor_type::MAX_OFFSET => 2,
+                            _ => 2,
+                        };
+                        let samples = self.get_next_samples(sensor_idx).await;
+                        if !samples.is_empty() {
+                            let buffer = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), samples);
+                            if let Some(publisher) = publisher.as_ref() {
+                                publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;
+                            };
+                        }
+                    }
+                    let mut timestamp = self.timestamps.lock().await;
+                    timestamp.update_all(Clock::now().as_secs());
+                    drop(timestamp);
                 }
-            }
             }
         }
 
@@ -208,7 +214,7 @@ mod tests {
             SensorType::Gyroscope(Uuid::new_v4()),
             SensorType::Magnetometer(Uuid::new_v4()),
         ];
-        let phyphox_mock = PhyphoxMock::new("Test", sensor_cluster, 100, false);
+        let phyphox_mock = PhyphoxMock::new("Test", sensor_cluster, 100.0, false);
         assert!(phyphox_mock.is_ok());
     }
 
@@ -219,7 +225,8 @@ mod tests {
             SensorType::Gyroscope(Uuid::new_v4()),
             SensorType::Magnetometer(Uuid::new_v4()),
         ];
-        let phyphox_mock = Arc::new(PhyphoxMock::new("Test", sensor_cluster, 100, false).unwrap());
+        let phyphox_mock =
+            Arc::new(PhyphoxMock::new("Test", sensor_cluster, 100.0, false).unwrap());
         let period = Duration::from_millis(100);
 
         let phyphox_mock_clone = Arc::clone(&phyphox_mock);
@@ -234,7 +241,7 @@ mod tests {
 
         let start_handle = tokio::spawn(async move {
             phyphox_mock_clone
-                .start(period, Some(abort_signal), None, None)
+                .start(period, Some(abort_signal), None)
                 .await
                 .unwrap();
         });
@@ -258,20 +265,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_next_samples() {
-        let sensor_cluster = vec![
-            SensorType::Accelerometer(Uuid::new_v4()),
-            SensorType::Gyroscope(Uuid::new_v4()),
-            SensorType::Magnetometer(Uuid::new_v4()),
-        ];
-        let phyphox_mock = PhyphoxMock::new("Test", sensor_cluster, 100, true).unwrap();
-        {
+        let period_millis = 100.0;
+        let factor = 10.0;
+        let sensor_cluster = vec![SensorType::Accelerometer(Uuid::new_v4())];
+        let phyphox_mock = PhyphoxMock::new("Test", sensor_cluster, period_millis, true).unwrap();
+        for _ in 0..10 {
+            // update timestamp
             let mut timestamp = phyphox_mock.timestamps.lock().await;
-            timestamp.incr_current_timestamp(0.1);
-        }
-        for _ in 0..100 {
-            let samples = phyphox_mock.get_next_samples(0, 0.0).await;
-            tokio::time::sleep(Duration::from_nanos(350)).await;
-            assert!(samples.len() < MAX_N_SAMPLES as usize);
+            timestamp.update_all(Clock::now().as_secs());
+            drop(timestamp);
+            let mut samples = Vec::new();
+
+            for _ in 0..factor as usize {
+                let new_samples = phyphox_mock.get_next_samples(0).await;
+                assert!(new_samples.len() < MAX_N_SAMPLES as usize);
+                samples.extend_from_slice(&new_samples);
+                tokio::time::sleep(Duration::from_secs_f64(period_millis / 1000.0 / factor)).await;
+            }
+            assert!(!samples.is_empty());
         }
     }
 }

@@ -22,7 +22,7 @@ impl GaussianNoise {
 
     /// Adds noise to sample
     pub(super) fn add_noise(&self, rng: &mut StdRng, data: f64) -> f64 {
-        data + self.draw_sample(rng)
+        data + self.draw_sample(rng).abs()
     }
 
     // Adds noise to vector of samples

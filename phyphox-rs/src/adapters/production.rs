@@ -8,8 +8,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use futures::future::join_all;
 use serde_json::Value;
 use tokio::sync::Notify;
+use tokio::time::{interval, MissedTickBehavior};
 
 use common::traits::{IMUFilter, IMUReadings, IMUSample};
 use common::types::filters::moving_average::MovingAverage;
@@ -32,6 +34,8 @@ const START_CMD: &str = "start";
 const STOP_CMD: &str = "stop";
 const CLEAR_CMD: &str = "clear";
 const CONFIG_CMD: &str = "/config?";
+
+const DEFAULT_WINDOW_SIZE: usize = 1;
 
 /// Configures data acquisition
 pub struct Phyphox {
@@ -70,10 +74,10 @@ impl Phyphox {
         &self,
         time_var: &str,
         timestamp_at_boot_secs: f64,
-        since: Option<f64>,
+        since: f64,
         variables: &[&str],
     ) -> Result<(Vec<f64>, Vec<XYZ>, bool), PhyphoxError> {
-        let query = helpers::build_query(variables, time_var, since);
+        let query = helpers::build_query(variables, time_var, Some(since));
         let data = self.fetch_json(&format!("{GET_CMD}{}", query)).await?;
         let status = helpers::get_status_from_json(&data)?;
         let results = helpers::parse_results(&data, variables, time_var)?;
@@ -114,7 +118,6 @@ impl PhyphoxPort for Phyphox {
         &self,
         period_millis: Duration,
         abort_signal: Option<Arc<Notify>>,
-        window_size: Option<usize>,
         publisher: Option<Vec<Publisher<SensorReadings<Sample3D>>>>,
     ) -> Result<(), PhyphoxError> {
         let timestamp_at_boot_secs = Clock::now().as_secs();
@@ -125,10 +128,8 @@ impl PhyphoxPort for Phyphox {
 
         log::info!("Fetching data...");
 
-        let mut ma_filters: Vec<Option<MovingAverage<XYZ>>> = window_size
-            .map_or(vec![None; N_SENSORS], |w_size| {
-                vec![Some(MovingAverage::new(w_size)); N_SENSORS]
-            });
+        let mut ma_filters: Vec<Option<MovingAverage<XYZ>>> =
+            vec![Some(MovingAverage::new(DEFAULT_WINDOW_SIZE)); N_SENSORS];
 
         let active_sensor = self
             .get_available_sensors()
@@ -137,50 +138,68 @@ impl PhyphoxPort for Phyphox {
 
         let abort_signal = abort_signal.unwrap_or(Arc::new(Notify::new()));
 
+        let mut ticker = interval(period_millis);
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
             tokio::select! {
                 _ = abort_signal.notified() => {
                     break;
                 }
 
-                _ = tokio::time::sleep(period_millis) => {
-                    for sensor in &self.sensor_cluster {
-                        if !active_sensor.contains(sensor) {
-                            continue;
-                        }
-                        let sensor_idx = usize::from(sensor);
-                        let (time_str, variables, sensor_idx) = helpers::control_str(sensor_idx)?;
-                        let (timestamp_info, untimed_data_info,  is_measuring) = match self
-                            .get_data(time_str, timestamp_at_boot_secs, Some(last_time[sensor_idx]), &variables)
-                            .await {
-                                Ok(result) => result,
-                                Err(e) => {
-                                    log::error!("Error fetching data: {:?}", e);
-                                    break;
-                                }
-                        };
-
-                        if !is_measuring {
-                            log::info!("Recording stopped.");
-                            break;
-                        }
-
-                        helpers::update_measurement_time(&timestamp_info, &mut last_time[sensor_idx]);
-
-                        let timed_samples: Vec<Sample3D> = timestamp_info.into_iter().zip(untimed_data_info.into_iter()).map(|(t, s)| Sample3D::from_measurement(t, s)).collect();
-                        let filtered_data = match ma_filters[sensor_idx].as_mut() {
-                            Some(ma_filter) => ma_filter.filter_batch(timed_samples),
-                            None => Ok(timed_samples)
-                        };
-
-                        if let Ok(filtered_data) = filtered_data {
-                            let buffer  = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), filtered_data);
-
-                            if let Some(publisher) = publisher.as_ref() {
-                                publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await
+            _ = ticker.tick() =>  {
+                let futures: Vec<Pin<Box<dyn Future<Output = Result<(Vec<f64>,Vec<XYZ>,bool),_>> + Send >>> = self.sensor_cluster.iter()
+                        .filter(|sensor| active_sensor.contains(sensor))
+                        .map(|sensor| {
+                            let sensor_idx = usize::from(sensor);
+                            let (time_str, variables, sensor_idx) = match helpers::control_str(sensor_idx) {
+                                Ok(data) => data,
+                                Err(_) => return Box::pin(async { Err(PhyphoxError::Other("Control string error".to_string())) }) as Pin<Box<dyn Future<Output = Result<_, _>> + Send>>, // Return an async error
                             };
-                        }
 
+                            Box::pin(async move {
+                                self.get_data(time_str, timestamp_at_boot_secs, last_time[sensor_idx], &variables).await
+                            }) as Pin<Box<dyn Future<Output = Result<_, _>> + Send>>
+                        })
+                        .collect();
+
+                    let results = join_all(futures).await;
+
+                    for (i, result) in results.into_iter().enumerate() {
+                        match result {
+                            Ok((timestamp_info, untimed_data_info, is_measuring)) => {
+                                if !is_measuring {
+                                    log::info!("Recording stopped.");
+                                        continue;
+                                    }
+
+                                let sensor = &self.sensor_cluster[i]; // Reconstruct sensor reference
+                                let (_,_,sensor_idx) = helpers::control_str(usize::from(sensor))?;
+
+                                helpers::update_measurement_time(&timestamp_info, &mut last_time[sensor_idx], timestamp_at_boot_secs);
+
+                                let timed_samples: Vec<Sample3D> = timestamp_info
+                                    .into_iter()
+                                    .zip(untimed_data_info.into_iter())
+                                    .map(|(t, s)| Sample3D::from_measurement(t, s))
+                                    .collect();
+
+                                let filtered_data = match ma_filters[sensor_idx].as_mut() {
+                                    Some(ma_filter) => ma_filter.filter_batch(timed_samples.clone()),
+                                    None => Ok(timed_samples.clone()),
+                                };
+
+                               if let Ok(filtered_data) = filtered_data {
+                                    let buffer = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), filtered_data);
+                                    if let Some(publisher) = publisher.as_ref() {
+                                        publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Error fetching data: {:?}", e);
+                            }
+                        }
                     }
                 }
             }
@@ -314,7 +333,7 @@ mod tests {
         let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test", sensor_cluster).unwrap();
 
         let (_timestamps, data, is_measuring) = phyphox
-            .get_data("acc_time", 0.0, Some(0.0), &["accX", "accY", "accZ"])
+            .get_data("acc_time", 0.0, 0.0, &["accX", "accY", "accZ"])
             .await
             .unwrap();
 
@@ -355,7 +374,7 @@ mod tests {
         let phyphox = Phyphox::new(mock_server.uri().as_str(), "Test", sensor_cluster).unwrap();
 
         let (_timestamps, data, is_measuring) = phyphox
-            .get_data("acc_time", 0.0, Some(0.0), &["accX", "accY", "accZ"])
+            .get_data("acc_time", 0.0, 0.0, &["accX", "accY", "accZ"])
             .await
             .unwrap();
 

@@ -10,7 +10,10 @@ num_enum = "0.7"
 async-trait.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+nalgebra.workspace = true
+dashmap.workspace = true
 
+gnuplot = "0.0.42"
 
 
 common = {path= "../common"}

@@ -59,6 +59,13 @@ where
         None
     }
 
+    pub(crate) fn peek_newest_timestamp(&self, sensor_type: &SensorType) -> Option<f64> {
+        if let Some(buffer) = self.cache.get(sensor_type) {
+            // peek at newest
+            return Some(buffer.peek_back().get_timestamp_secs());
+        }
+        None
+    }
     pub(crate) fn peek_oldest(&self, sensor_type: &SensorType) -> Option<&T> {
         if let Some(buffer) = self.cache.get(sensor_type) {
             // peek at newest
@@ -75,7 +82,7 @@ where
 impl<T, U> Interpolable<T, U> for Cache<T, U>
 where
     U: IMUUntimedSample + Lerp + Default + Send + Sync + 'static + Clone,
-    T: IMUSample<Untimed = U>,
+    T: IMUSample<Untimed = U> + std::fmt::Debug,
 {
     fn interpolate_samples(&self, timestamp_sec: f64) -> Vec<(SensorType, T)> {
         let sensor_types = self.get_sensor_types();
@@ -95,7 +102,7 @@ where
                     sensor_type.clone(),
                     T::from_measurement(
                         timestamp_sec,
-                        oldest_measurement * (1.0 * alpha) + newest_measurement * alpha,
+                        oldest_measurement * (1.0 - alpha) + newest_measurement * alpha,
                     ),
                 ));
             } else {

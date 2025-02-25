@@ -8,15 +8,16 @@ pub(crate) use resampler::Resampler;
 use common::types::filters::Average;
 use common::types::filters::WeightedAverage;
 use dashmap::DashMap;
+use std::marker::PhantomData;
 use std::sync::Arc;
-use std::{error::Error, marker::PhantomData};
 use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration};
+use tokio::time::{interval, Duration, MissedTickBehavior};
 
 use crate::pipeline::cache::{Cache, Interpolable};
 use crate::utils;
 use crate::SmothingPolicy;
 use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSource, IMUUntimedSample};
+use common::types::filters::MovingAverage;
 use common::types::sensors::SensorType;
 use common::types::Clock;
 use publisher::PublisherManager;
@@ -35,11 +36,12 @@ pub struct ResamplerPipeline<T, S> {
 
 impl<T, S> ResamplerPipeline<T, S>
 where
-    S: IMUSample,
-    T: Send + Sync + IMUReadings<S> + 'static,
+    S: IMUSample + std::fmt::Debug,
+    T: Send + Sync + IMUReadings<S> + std::fmt::Debug + 'static,
     S::Untimed: IMUUntimedSample,
     Average<S::Untimed>: IMUFilter<S>,
     WeightedAverage<S::Untimed>: IMUFilter<S>,
+    MovingAverage<S::Untimed>: IMUFilter<S>,
     Cache<S, S::Untimed>: Interpolable<S, S::Untimed>,
 {
     pub fn new(tag: &str, sensor_cluster: Vec<SensorType>) -> Self {
@@ -59,12 +61,6 @@ where
     pub async fn collect_samples(&self, buffering_timestamp_secs: f64) -> Vec<T> {
         let mut buffer_clone = utils::clone_and_clear(self.buffer.clone()).await;
         for sensor_buffer in buffer_clone.iter_mut() {
-            println!(
-                "Resampler processing samples: sensor: {:?}, time{}, n_samples {} ",
-                sensor_buffer.get_sensor_type(),
-                buffering_timestamp_secs,
-                sensor_buffer.get_samples().len()
-            );
             utils::collect_samples(sensor_buffer, buffering_timestamp_secs).await;
         }
 
@@ -82,37 +78,38 @@ where
         &self,
         resample_policy: SmothingPolicy,
         resampling_period_millis: f64,
-        resampling_buffering_factor: u32,
-    ) -> Result<(), Box<dyn Error>> {
+        resampling_delay_millis: f64,
+    ) {
         let resampling_period_millis =
             f64::max(resampling_period_millis, MIN_RESAMPLING_PERIOD_MILLIS);
         let resampling_period_secs = resampling_period_millis / 1000.0;
+        let resampling_delay_secs = resampling_delay_millis / 1000.0;
         let mut resampler = Resampler::<S, S::Untimed>::new(&self.sensor_cluster, resample_policy);
         let resampling_duration_secs = Duration::from_secs_f64(resampling_period_secs);
-        let mut resampling_cycles = 1;
+        let mut ticker = interval(resampling_duration_secs);
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
-            sleep(resampling_duration_secs).await;
+            ticker.tick().await;
+            //sleep(
+            //resampling_duration_secs
+            //- Duration::from_secs_f64(f64::min(processing_time, resampling_period_secs)),
+            //)
+            //.await;
             let timestamp_now_secs = Clock::now().as_secs();
-            let max_sample_age =
-                resampling_buffering_factor as f64 * resampling_duration_secs.as_secs_f64();
-            let buffering_timestamp = timestamp_now_secs - max_sample_age;
-            let resample_timestamp = timestamp_now_secs - max_sample_age / 2.0;
+            let buffering_timestamp = timestamp_now_secs - resampling_delay_secs;
+            let resample_timestamp = timestamp_now_secs - resampling_delay_secs / 2.0;
 
             // collect samples every buffering period = resampling_period * buffering_factor.
-            if resampling_buffering_factor == 0
-                || resampling_cycles % resampling_buffering_factor == 0
-            {
+            if buffering_timestamp > resampler.peek_newest_timestamp() {
                 // raw samples are samples collected by imu source with timestamp after buffering timestamp
                 let raw_samples = self.collect_samples(buffering_timestamp).await;
 
                 // smooth collected samples and add timestamp
                 resampler.buffer_samples(raw_samples, resample_timestamp);
             }
-            let processed_samples = resampler.interpolate(timestamp_now_secs);
-
+            let processed_samples = resampler.interpolate(buffering_timestamp);
             self.notify(processed_samples).await;
-            resampling_cycles += 1;
         }
     }
 }

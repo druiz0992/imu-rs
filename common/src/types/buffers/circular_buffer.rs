@@ -60,10 +60,39 @@ impl<T: Clone + Default> CircularBuffer<T> {
     pub fn peek_back(&self) -> &T {
         self.buffer.back().unwrap()
     }
+
+    pub fn as_slice(&self) -> &[T] {
+        self.buffer.as_slices().0
+    }
+    pub fn as_vec(&self) -> Vec<T> {
+        let (first, second) = self.buffer.as_slices();
+        [first, second].concat()
+    }
+
     /// Returns size of CircularBuffer
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.buffer.len()
+    }
+}
+
+impl<T> IntoIterator for CircularBuffer<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        // Convert the VecDeque into a Vec and use IntoIter to iterate over it
+        self.buffer.into_iter().collect::<Vec<T>>().into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a CircularBuffer<T> {
+    type Item = &'a T;
+    type IntoIter = std::iter::Chain<std::slice::Iter<'a, T>, std::slice::Iter<'a, T>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let (first, second) = self.buffer.as_slices();
+        first.iter().chain(second.iter()) // Chains the two slices into a single iterator
     }
 }
 
