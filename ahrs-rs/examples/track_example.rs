@@ -75,13 +75,10 @@ async fn main() {
     // connect resampler to phyphox
     resampler
         .attach_listeners(&*phyphox, &sensor_cluster)
-        .await
         .unwrap();
 
     // connect ahrs to phyphox
-    ahrs.attach_listeners(&*resampler, &sensor_cluster)
-        .await
-        .unwrap();
+    ahrs.attach_listeners(&*resampler, &sensor_cluster).unwrap();
     // connect samples from ahrs
 
     IMUSink::<SensorReadings<SampleQuaternion>, SampleQuaternion>::attach_listeners(
@@ -89,14 +86,12 @@ async fn main() {
         &ahrs,
         &[orientation_measurement.clone()],
     )
-    .await
     .unwrap();
 
     // connect samples from ahrs
     let mut sink = SinkMock::<SampleQuaternion>::new();
     sink.register_callback(process_samples);
     sink.attach_listeners(&ahrs, &[orientation_measurement.clone()])
-        .await
         .unwrap();
 
     let timeout_duration = Duration::from_secs(500);

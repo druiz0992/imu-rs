@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -8,7 +7,6 @@ use common::types::filters::Average;
 use common::types::filters::WeightedAverage;
 use common::types::sensors::SensorType;
 
-#[async_trait]
 impl<T, S> IMUSource<T, S> for ResamplerPipeline<T, S>
 where
     S: IMUSample,
@@ -21,15 +19,15 @@ where
         self.tag.as_str()
     }
 
-    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
-        Ok(self.publishers.get_available_publisher_types())
+    fn get_available_sensors(&self) -> Vec<SensorType> {
+        self.publishers.get_available_publisher_types()
     }
 
-    async fn unregister_listener(&self, id: Uuid) {
+    fn unregister_listener(&self, id: Uuid) {
         let _ = self.publishers.remove_listener(id);
     }
 
-    async fn register_listener(
+    fn register_listener(
         &self,
         listener: &mut dyn Notifiable<T>,
         sensor_type: &SensorType,
@@ -37,7 +35,7 @@ where
         self.publishers.add_listener(listener, sensor_type)
     }
 
-    async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<T>) {
+    fn notify_listeners(&self, sensor_type: SensorType, data: Arc<T>) {
         self.publishers.notify_listeners(sensor_type, data);
     }
 }

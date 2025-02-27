@@ -93,7 +93,7 @@ where
                 Err(e) => return Err(e),
             }
         }
-        return Ok(ids);
+        Ok(ids)
     }
     fn detach_listener(
         &self,
@@ -131,7 +131,7 @@ where
                 Err(e) => return Err(e),
             }
         }
-        return Ok(ids);
+        Ok(ids)
     }
     fn detach_listener(
         &self,

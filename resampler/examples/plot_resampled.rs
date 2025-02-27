@@ -25,12 +25,11 @@ async fn main() {
         "Resampled",
         sensor_cluster.clone(),
         plot_window_size_samples,
-    )
-    .await;
+    );
     plot_1d_resampled.start(plot_resampled_refresh_period_millis);
 
     let plot_raw_refresh_period_millis = 200.0;
-    let plot_1d_raw = Plot1D::new("Raw", sensor_cluster.clone(), plot_window_size_samples).await;
+    let plot_1d_raw = Plot1D::new("Raw", sensor_cluster.clone(), plot_window_size_samples);
     plot_1d_raw.start(plot_raw_refresh_period_millis);
 
     // Start phyphox  service
@@ -56,7 +55,6 @@ async fn main() {
 
     resampler
         .attach_listeners(&*phyphox, &sensor_cluster)
-        .await
         .unwrap();
 
     IMUSink::<SensorReadings<Sample3D>, Sample3D>::attach_listeners(
@@ -64,14 +62,12 @@ async fn main() {
         &*resampler,
         &sensor_cluster.clone(),
     )
-    .await
     .unwrap();
     IMUSink::<SensorReadings<Sample3D>, Sample3D>::attach_listeners(
         &plot_1d_raw,
         &*phyphox,
         &sensor_cluster.clone(),
     )
-    .await
     .unwrap();
 
     let timeout_duration = Duration::from_secs(200);

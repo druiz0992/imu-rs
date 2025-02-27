@@ -9,9 +9,8 @@ use common::types::filters::Average;
 use common::types::filters::WeightedAverage;
 use dashmap::DashMap;
 use std::marker::PhantomData;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::time::{interval, Duration, MissedTickBehavior};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use crate::pipeline::cache::{Cache, Interpolable};
 use crate::utils;
@@ -58,23 +57,23 @@ where
         }
     }
 
-    pub async fn collect_samples(&self, buffering_timestamp_secs: f64) -> Vec<T> {
-        let mut buffer_clone = utils::clone_and_clear(self.buffer.clone()).await;
+    pub fn collect_samples(&self, buffering_timestamp_secs: f64) -> Vec<T> {
+        let mut buffer_clone = utils::clone_and_clear(self.buffer.clone());
         for sensor_buffer in buffer_clone.iter_mut() {
-            utils::collect_samples(sensor_buffer, buffering_timestamp_secs).await;
+            utils::collect_samples(sensor_buffer, buffering_timestamp_secs);
         }
 
         buffer_clone
     }
 
-    async fn notify(&self, buffer: Vec<(SensorType, S)>) {
+    fn notify(&self, buffer: Vec<(SensorType, S)>) {
         for (sensor_type, samples) in buffer {
             let readings = T::from_vec(&self.tag, sensor_type.clone(), vec![samples]);
-            self.notify_listeners(sensor_type, Arc::new(readings)).await
+            self.notify_listeners(sensor_type, Arc::new(readings));
         }
     }
 
-    pub async fn start(
+    pub fn start(
         &self,
         resample_policy: SmothingPolicy,
         resampling_period_millis: f64,
@@ -86,16 +85,10 @@ where
         let resampling_delay_secs = resampling_delay_millis / 1000.0;
         let mut resampler = Resampler::<S, S::Untimed>::new(&self.sensor_cluster, resample_policy);
         let resampling_duration_secs = Duration::from_secs_f64(resampling_period_secs);
-        let mut ticker = interval(resampling_duration_secs);
-        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
-            ticker.tick().await;
-            //sleep(
-            //resampling_duration_secs
-            //- Duration::from_secs_f64(f64::min(processing_time, resampling_period_secs)),
-            //)
-            //.await;
+            let start_time = Instant::now();
+
             let timestamp_now_secs = Clock::now().as_secs();
             let buffering_timestamp = timestamp_now_secs - resampling_delay_secs;
             let resample_timestamp = timestamp_now_secs - resampling_delay_secs / 2.0;
@@ -103,13 +96,18 @@ where
             // collect samples every buffering period = resampling_period * buffering_factor.
             if buffering_timestamp > resampler.peek_newest_timestamp() {
                 // raw samples are samples collected by imu source with timestamp after buffering timestamp
-                let raw_samples = self.collect_samples(buffering_timestamp).await;
+                let raw_samples = self.collect_samples(buffering_timestamp);
 
                 // smooth collected samples and add timestamp
                 resampler.buffer_samples(raw_samples, resample_timestamp);
             }
             let processed_samples = resampler.interpolate(buffering_timestamp);
-            self.notify(processed_samples).await;
+            self.notify(processed_samples);
+
+            let elapsed = start_time.elapsed();
+            if elapsed < resampling_duration_secs {
+                std::thread::sleep(resampling_duration_secs - elapsed);
+            }
         }
     }
 }
@@ -121,11 +119,11 @@ mod tests {
     use common::traits::Notifiable;
     use common::types::sensors::SensorReadings;
     use common::types::timed::Sample3D;
-    use publisher::{async_listener, AsyncListener};
-    use tokio::time::timeout;
+    use publisher::{listener, Listener};
+    use std::sync::mpsc;
     use uuid::Uuid;
 
-    async fn test_callback() {
+    fn test_callback() {
         let acc_id = Uuid::new_v4();
         let sensor_cluster = vec![
             SensorType::Accelerometer(acc_id),
@@ -138,26 +136,26 @@ mod tests {
         ));
 
         let listener_resampler = pipeline.clone();
-        let listener = AsyncListener::new({
+        let listener = Listener::new({
             move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
                 let resampler = listener_resampler.clone();
-                async move { resampler.process_samples(_id, value).await }
+                resampler.process_samples(_id, value);
             }
         });
 
-        let callback = listener.get_async_callback();
+        let callback = listener.get_callback();
         let buffer = pipeline
             .buffer
             .get(&SensorType::Accelerometer(acc_id))
             .unwrap();
 
-        let data = buffer.lock().await;
+        let data = buffer.lock().unwrap();
         let snapshot = data.clone();
         drop(data);
-        callback(Uuid::new_v4(), Arc::new(snapshot.clone())).await;
+        callback(Uuid::new_v4(), Arc::new(snapshot.clone()));
     }
 
-    async fn test_callback_with_macro() {
+    fn test_callback_with_macro() {
         let acc_id = Uuid::new_v4();
         let sensor_cluster = vec![
             SensorType::Accelerometer(acc_id),
@@ -168,30 +166,49 @@ mod tests {
             "test",
             sensor_cluster,
         ));
-        let listener = async_listener!(pipeline.process_samples);
+        let listener = listener!(pipeline.process_samples);
 
         //let listener = async_listener!(resampler.handle);
-        let callback = listener.get_async_callback();
+        let callback = listener.get_callback();
         let buffer = pipeline
             .buffer
             .get(&SensorType::Accelerometer(acc_id))
             .unwrap();
 
-        let data = buffer.lock().await;
+        let data = buffer.lock().unwrap();
         let snapshot = data.clone();
         drop(data);
-        callback(Uuid::new_v4(), Arc::new(snapshot.clone())).await;
+        callback(Uuid::new_v4(), Arc::new(snapshot.clone()));
     }
 
-    #[tokio::test]
-    async fn test_with_timeout() {
-        let result = timeout(Duration::from_secs(3), test_callback()).await;
-        if result.is_err() {
-            panic!("test_callback() aborted after 3 seconds");
+    fn run_with_timeout<F, T>(func: F, timeout: Duration) -> Option<T>
+    where
+        F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
+    {
+        let (tx, rx) = mpsc::channel();
+
+        // Spawn a thread to execute the function
+        std::thread::spawn(move || {
+            let result = func();
+            let _ = tx.send(result); // Ignore if the receiver is already closed
+        });
+
+        // Wait for the result with a timeout
+        rx.recv_timeout(timeout).ok()
+    }
+    #[test]
+    fn test_with_timeout() {
+        let result = run_with_timeout(|| test_callback(), Duration::from_secs(3));
+        match result {
+            None => panic!("test_callback() aborted after 3 seconds"),
+            _ => (),
         }
-        let result = timeout(Duration::from_secs(3), test_callback_with_macro()).await;
-        if result.is_err() {
-            panic!("test_callback_with_macro() aborted after 3 seconds");
+
+        let result = run_with_timeout(|| test_callback_with_macro(), Duration::from_secs(3));
+        match result {
+            None => panic!("test_callback_with_macro() aborted after 3 seconds"),
+            _ => (),
         }
     }
 }

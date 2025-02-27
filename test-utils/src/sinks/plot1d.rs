@@ -162,7 +162,7 @@ impl IMUSink<SensorReadings<Sample3D>, Sample3D> for Plot1D {
                 Err(e) => return Err(e),
             }
         }
-        return Ok(ids);
+        Ok(ids)
     }
     fn detach_listener(
         &self,

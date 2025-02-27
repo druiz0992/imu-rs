@@ -73,7 +73,7 @@ where
                 Err(e) => return Err(e),
             }
         }
-        return Ok(ids);
+        Ok(ids)
     }
     fn detach_listener(&self, source: &dyn IMUSource<SensorReadings<T>, T>, id: Uuid) {
         source.unregister_listener(id);

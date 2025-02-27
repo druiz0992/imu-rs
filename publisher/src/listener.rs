@@ -16,7 +16,7 @@ where
 {
     pub fn new<F>(callback: F) -> Self
     where
-        F: Fn(Uuid, Arc<T>) -> () + Send + Sync + 'static,
+        F: Fn(Uuid, Arc<T>) + Send + Sync + 'static,
     {
         let callback = Arc::new(move |id: Uuid, data: Arc<T>| {
             callback(id, data);

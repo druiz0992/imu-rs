@@ -70,20 +70,15 @@ async fn test_ahrs() {
     // connect resampler to phyphox
     resampler
         .attach_listeners(&*phyphox, &sensor_cluster)
-        .await
         .unwrap();
 
     // connect ahrs to phyphox
-    ahrs.attach_listeners(&*resampler, &sensor_cluster)
-        .await
-        .unwrap();
+    ahrs.attach_listeners(&*resampler, &sensor_cluster).unwrap();
 
     // connect samples from ahrs
     let mut sink = SinkMock::<SampleQuaternion>::new();
     sink.register_callback(process_samples);
-    sink.attach_listeners(&ahrs, &[ahrs_measurement])
-        .await
-        .unwrap();
+    sink.attach_listeners(&ahrs, &[ahrs_measurement]).unwrap();
 
     // Timeout duration: 5 seconds
     let timeout_duration = Duration::from_secs(1);

@@ -6,7 +6,6 @@ pub use pipeline::ResamplerPipeline;
 mod utils;
 
 use std::sync::Arc;
-use tokio::runtime::Runtime;
 
 use crate::pipeline::cache::{Cache, Interpolable};
 use common::traits::imu::{IMUFilter, IMUUntimedSample};
@@ -37,16 +36,11 @@ where
     let pipeline_clone = Arc::clone(&pipeline);
 
     let handle = std::thread::spawn(move || {
-        let rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            pipeline_clone
-                .start(
-                    smoothing_policy,
-                    resampling_period_millis,
-                    resampling_delay_millis,
-                )
-                .await
-        })
+        pipeline_clone.start(
+            smoothing_policy,
+            resampling_period_millis,
+            resampling_delay_millis,
+        )
     });
 
     (handle, pipeline)

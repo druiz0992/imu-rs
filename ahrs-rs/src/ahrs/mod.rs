@@ -2,8 +2,7 @@ pub(crate) mod buffer;
 pub(crate) mod sink;
 pub(crate) mod source;
 
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use ahrs::{Ahrs, Madgwick};
 
@@ -16,7 +15,7 @@ use common::types::untimed::UnitQuaternion;
 use publisher::PublisherManager;
 
 const MADGWICK_BETA: f64 = 0.08;
-const DISCARD_N_INITIAL_SAMPLES: usize = 300;
+const DISCARD_N_INITIAL_SAMPLES: usize = 100;
 
 pub struct AHRSFilterManager {
     ahrs_filter: Madgwick<f64>,
@@ -47,7 +46,7 @@ impl AHRSFilterManager {
         })
     }
 
-    async fn update_filter(&mut self, buffer: AHRSInputSamples) -> SampleQuaternion {
+    fn update_filter(&mut self, buffer: AHRSInputSamples) -> SampleQuaternion {
         let gyro = buffer
             .get_samples_by_index(usize::from(SensorIndex::Gyroscope))
             .unwrap();
@@ -70,7 +69,7 @@ impl AHRSFilterManager {
         sample_quaternion
     }
 
-    async fn clone_and_clear(&mut self) -> AHRSInputSamples {
+    fn clone_and_clear(&mut self) -> AHRSInputSamples {
         let mut buffer_clone = AHRSInputSamples::new();
 
         for sensor_type in &self.sensor_cluster {
@@ -160,8 +159,8 @@ mod tests {
                 .buffer
                 .set_samples_by_index(SensorIndex::Accelerometer.into(), accel);
 
-            let buffer_clone = ahrs_filter.clone_and_clear().await;
-            let q_computed = ahrs_filter.update_filter(buffer_clone).await;
+            let buffer_clone = ahrs_filter.clone_and_clear();
+            let q_computed = ahrs_filter.update_filter(buffer_clone);
 
             assert_eq!(q_expected, q_computed.get_measurement().inner());
         }
