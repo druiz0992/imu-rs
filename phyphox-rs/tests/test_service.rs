@@ -1,5 +1,5 @@
 use phyphox_rs::services;
-use publisher::Listener;
+use publisher::AsyncListener;
 use std::collections::HashMap;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -65,7 +65,7 @@ async fn test_receive_accelerometer_samples() {
     let mut listener = {
         let received_samples = received_samples.clone();
         let received_id = received_id.clone();
-        Listener::new(move |id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
+        AsyncListener::new(move |id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
             let buffer = received_samples.clone();
             let received_id = received_id.clone();
             async move {
@@ -134,7 +134,7 @@ async fn test_receive_multiple_sensors() {
     // create listener handler
     let listener = {
         let received_samples = received_samples.clone();
-        Listener::new(move |id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
+        AsyncListener::new(move |id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
             let storage = received_samples.clone();
             async move {
                 let mut storage_lock = storage.lock().await;
@@ -198,7 +198,7 @@ async fn test_stop_receiving_accelerometer_samples() {
     // create listener handler
     let mut listener = {
         let received_samples = received_samples.clone();
-        Listener::new(move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
+        AsyncListener::new(move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
             let buffer = received_samples.clone();
             async move {
                 let mut buffer_lock = buffer.lock().await;

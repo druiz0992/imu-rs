@@ -4,15 +4,15 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use common::traits::Notifiable;
-use common::types::Callback;
+use common::types::{AsyncCallback, Callback};
 
 #[derive(Clone)]
-pub struct Listener<T> {
-    callback: Callback<T>,
+pub struct AsyncListener<T> {
+    callback: AsyncCallback<T>,
     id: Option<Uuid>,
 }
 
-impl<T> Listener<T>
+impl<T> AsyncListener<T>
 where
     T: Send + Sync + 'static,
 {
@@ -26,6 +26,41 @@ where
             Box::pin(fut) as Pin<Box<dyn Future<Output = ()> + Send>>
         });
 
+        AsyncListener { callback, id: None }
+    }
+}
+
+impl<T> Notifiable<T> for AsyncListener<T> {
+    fn get_async_callback(&self) -> AsyncCallback<T> {
+        self.callback.clone()
+    }
+    fn get_callback(&self) -> Callback<T> {
+        todo!();
+    }
+
+    fn set_id(&mut self, id: Uuid) {
+        self.id = Some(id);
+    }
+}
+
+#[derive(Clone)]
+pub struct Listener<T> {
+    callback: Callback<T>,
+    id: Option<Uuid>,
+}
+
+impl<T> Listener<T>
+where
+    T: Send + Sync + 'static,
+{
+    pub fn new<F>(callback: F) -> Self
+    where
+        F: Fn(Uuid, Arc<T>) -> () + Send + Sync + 'static,
+    {
+        let callback = Arc::new(move |id: Uuid, data: Arc<T>| {
+            callback(id, data);
+        });
+
         Listener { callback, id: None }
     }
 }
@@ -33,6 +68,9 @@ where
 impl<T> Notifiable<T> for Listener<T> {
     fn get_callback(&self) -> Callback<T> {
         self.callback.clone()
+    }
+    fn get_async_callback(&self) -> AsyncCallback<T> {
+        todo!();
     }
 
     fn set_id(&mut self, id: Uuid) {
@@ -66,14 +104,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_new_listener() {
-        let listener = Listener::new({
+        let listener = AsyncListener::new({
             move |_id: Uuid, value: Arc<i32>| async move {
                 let data = *value;
                 assert_eq!(data, 42);
             }
         });
 
-        let callback = listener.get_callback();
+        let callback = listener.get_async_callback();
         callback(Uuid::new_v4(), Arc::new(42)).await;
     }
 
@@ -81,14 +119,14 @@ mod tests {
     async fn test_listener_with_method() {
         let handler = Arc::new(TestHandler::new());
 
-        let listener = Listener::new({
+        let listener = AsyncListener::new({
             move |id: Uuid, value: Arc<Vec<i32>>| {
                 let handler = handler.clone();
                 async move { handler.handle(id, value).await }
             }
         });
 
-        let callback = listener.get_callback();
+        let callback = listener.get_async_callback();
         callback(Uuid::new_v4(), Arc::new(vec![400])).await;
     }
 
@@ -98,7 +136,7 @@ mod tests {
 
         let listener = listener!(handler.handle);
 
-        let callback = listener.get_callback();
+        let callback = listener.get_async_callback();
         callback(Uuid::new_v4(), Arc::new(vec![400])).await;
     }
 }

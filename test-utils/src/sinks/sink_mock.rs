@@ -7,9 +7,9 @@ use uuid::Uuid;
 use common::traits::{IMUSample, IMUSink, IMUSource};
 use common::types::sensors::{SensorReadings, SensorType};
 use publisher::listener;
-use publisher::Listener;
+use publisher::AsyncListener;
 
-type MockCallback<T> =
+type MockAsyncCallback<T> =
     Arc<Option<Arc<dyn Fn(MockValue, SensorType, Arc<SensorReadings<T>>) + Send + Sync>>>;
 
 #[derive(Clone)]
@@ -27,7 +27,7 @@ impl Default for MockValue {
 #[derive(Clone, Default)]
 pub struct SinkMock<T> {
     control: Arc<RwLock<HashMap<Uuid, SensorType>>>,
-    callback: MockCallback<T>,
+    callback: MockAsyncCallback<T>,
     value: MockValue,
 }
 

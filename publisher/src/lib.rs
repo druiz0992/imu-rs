@@ -9,4 +9,4 @@ pub use publisher::{Publishable, Publisher};
 pub use publisher_manager::PublisherManager;
 
 #[doc(inline)]
-pub use listener::Listener;
+pub use listener::AsyncListener;

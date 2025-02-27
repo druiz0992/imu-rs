@@ -16,7 +16,7 @@
 
      // Register a listener
      let listener_id = publisher.register(|data: String| {
-         println!("Listener received: {}", data);
+         println!("AsyncListener received: {}", data);
      });
 
      // Notify all listeners

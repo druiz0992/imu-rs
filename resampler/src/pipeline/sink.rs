@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use publisher::listener;
-use publisher::Listener;
+use publisher::AsyncListener;
 use std::sync::Arc;
 use uuid::Uuid;
 

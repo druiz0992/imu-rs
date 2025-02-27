@@ -4,7 +4,7 @@
 #[derive(Debug)]
 pub enum PhyphoxError {
     /// Error indicating that the listener was not found.
-    ListenerNotFound(String),
+    AsyncListenerNotFound(String),
 
     /// Error indicating that there was an issue building the client.
     ClientBuild(String),

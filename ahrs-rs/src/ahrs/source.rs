@@ -14,11 +14,11 @@ impl IMUSource<SensorReadings<SampleQuaternion>, SampleQuaternion> for AHRSFilte
     }
 
     async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
-        Ok(self.publishers.get_available_publisher_types().await)
+        Ok(self.publishers.get_available_publisher_types())
     }
 
     async fn unregister_listener(&self, id: Uuid) {
-        let _ = self.publishers.remove_listener(id).await;
+        let _ = self.publishers.remove_listener(id);
     }
 
     async fn register_listener(
@@ -26,7 +26,7 @@ impl IMUSource<SensorReadings<SampleQuaternion>, SampleQuaternion> for AHRSFilte
         listener: &mut dyn Notifiable<SensorReadings<SampleQuaternion>>,
         sensor_type: &SensorType,
     ) -> Result<Uuid, String> {
-        self.publishers.add_listener(listener, sensor_type).await
+        self.publishers.add_listener(listener, sensor_type)
     }
 
     async fn notify_listeners(

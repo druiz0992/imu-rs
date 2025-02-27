@@ -8,7 +8,7 @@ use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::{Sample3D, SampleQuaternion};
 use publisher::listener;
-use publisher::Listener;
+use publisher::AsyncListener;
 
 use crate::renderable::{Renderable3D, RigidBody};
 

@@ -121,7 +121,7 @@ mod tests {
     use common::traits::Notifiable;
     use common::types::sensors::SensorReadings;
     use common::types::timed::Sample3D;
-    use publisher::{listener, Listener};
+    use publisher::{listener, AsyncListener};
     use tokio::time::timeout;
     use uuid::Uuid;
 
@@ -138,14 +138,14 @@ mod tests {
         ));
 
         let listener_resampler = pipeline.clone();
-        let listener = Listener::new({
+        let listener = AsyncListener::new({
             move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
                 let resampler = listener_resampler.clone();
                 async move { resampler.process_samples(_id, value).await }
             }
         });
 
-        let callback = listener.get_callback();
+        let callback = listener.get_async_callback();
         let buffer = pipeline
             .buffer
             .get(&SensorType::Accelerometer(acc_id))
@@ -171,7 +171,7 @@ mod tests {
         let listener = listener!(pipeline.process_samples);
 
         //let listener = listener!(resampler.handle);
-        let callback = listener.get_callback();
+        let callback = listener.get_async_callback();
         let buffer = pipeline
             .buffer
             .get(&SensorType::Accelerometer(acc_id))

@@ -22,11 +22,11 @@ where
     }
 
     async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
-        Ok(self.publishers.get_available_publisher_types().await)
+        Ok(self.publishers.get_available_publisher_types())
     }
 
     async fn unregister_listener(&self, id: Uuid) {
-        let _ = self.publishers.remove_listener(id).await;
+        let _ = self.publishers.remove_listener(id);
     }
 
     async fn register_listener(
@@ -34,7 +34,7 @@ where
         listener: &mut dyn Notifiable<T>,
         sensor_type: &SensorType,
     ) -> Result<Uuid, String> {
-        self.publishers.add_listener(listener, sensor_type).await
+        self.publishers.add_listener(listener, sensor_type)
     }
 
     async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<T>) {

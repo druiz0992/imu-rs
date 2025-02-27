@@ -5,19 +5,19 @@ use tokio::task::JoinSet;
 use uuid::Uuid;
 
 use common::traits::Notifiable;
-use common::types::Callback;
+use common::types::AsyncCallback;
 
 #[async_trait]
 pub trait Publishable<T> {
-    async fn register_listener(&self, listener: &mut dyn Notifiable<T>) -> Uuid;
-    async fn unregister_listener(&self, listener_id: Uuid);
-    async fn unregister_all(&self);
+    fn register_listener(&self, listener: &mut dyn Notifiable<T>) -> Uuid;
+    fn unregister_listener(&self, listener_id: Uuid);
+    fn unregister_all(&self);
     async fn notify_listeners(&self, data: Arc<T>);
 }
 
 #[derive(Clone, Default)]
 pub struct Publisher<T> {
-    listeners: Arc<DashMap<Uuid, Callback<T>>>,
+    listeners: Arc<DashMap<Uuid, AsyncCallback<T>>>,
 }
 
 impl<T> Publisher<T> {
@@ -33,23 +33,23 @@ impl<T> Publishable<T> for Publisher<T>
 where
     T: Send + Sync + 'static,
 {
-    async fn register_listener(&self, listener: &mut dyn Notifiable<T>) -> Uuid {
-        let callback = listener.get_callback();
+    fn register_listener(&self, listener: &mut dyn Notifiable<T>) -> Uuid {
+        let callback = listener.get_async_callback();
         let listener_id = Uuid::new_v4();
         listener.set_id(listener_id);
         self.listeners.insert(listener_id, callback);
         listener_id
     }
-    async fn unregister_all(&self) {
+    fn unregister_all(&self) {
         self.listeners.clear();
     }
 
-    async fn unregister_listener(&self, listener_id: Uuid) {
+    fn unregister_listener(&self, listener_id: Uuid) {
         self.listeners.remove(&listener_id);
     }
 
     async fn notify_listeners(&self, data: Arc<T>) {
-        let listeners: Vec<(Uuid, Callback<T>)> = self
+        let listeners: Vec<(Uuid, AsyncCallback<T>)> = self
             .listeners
             .iter()
             .map(|entry| (*entry.key(), entry.value().clone()))
@@ -72,7 +72,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{listener, listener::Listener};
+    use crate::{listener, listener::AsyncListener};
     use tokio::sync::Mutex as AsyncMutex;
 
     struct TestHandler {
@@ -97,7 +97,7 @@ mod tests {
         let publisher = Publisher::new();
         let handler = Arc::new(TestHandler::new());
 
-        let mut listener = Listener::new({
+        let mut listener = AsyncListener::new({
             let handler = handler.clone();
             move |_id: Uuid, value| {
                 let handler = handler.clone();
@@ -107,7 +107,7 @@ mod tests {
             }
         });
 
-        let _listener_id = publisher.register_listener(&mut listener).await;
+        let _listener_id = publisher.register_listener(&mut listener);
         publisher.notify_listeners(Arc::new(42)).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -121,7 +121,7 @@ mod tests {
 
         let mut listener = listener!(handler.handle);
 
-        let _listener_id = publisher.register_listener(&mut listener).await;
+        let _listener_id = publisher.register_listener(&mut listener);
         publisher.notify_listeners(Arc::new(42)).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -133,7 +133,7 @@ mod tests {
         let publisher = Publisher::new();
         let handler = Arc::new(TestHandler::new());
 
-        let mut listener = Listener::new({
+        let mut listener = AsyncListener::new({
             let handler = handler.clone();
             move |_id: Uuid, value: Arc<i32>| {
                 let handler = handler.clone();
@@ -143,8 +143,8 @@ mod tests {
             }
         });
 
-        let listener_id = publisher.register_listener(&mut listener).await;
-        publisher.unregister_listener(listener_id).await;
+        let listener_id = publisher.register_listener(&mut listener);
+        publisher.unregister_listener(listener_id);
         publisher.notify_listeners(Arc::new(100)).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;

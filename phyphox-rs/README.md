@@ -12,7 +12,7 @@ In order to use the library, you need to install Phyphox App on your phone, and 
 
     use async_trait::async_trait;
     use phyphox_rs::services;
-    use publisher::Listener;
+    use publisher::AsyncListener;
     use std::collections::HashMap;
     use std::{sync::Arc, time::Duration};
     use tokio::sync::{Mutex, RwLock};

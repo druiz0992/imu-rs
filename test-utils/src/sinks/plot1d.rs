@@ -14,7 +14,7 @@ use common::types::clock::Clock;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use publisher::listener;
-use publisher::Listener;
+use publisher::AsyncListener;
 
 type PlotDataVec = (
     CircularBuffer<f64>,
