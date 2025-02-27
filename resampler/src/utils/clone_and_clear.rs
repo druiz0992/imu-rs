@@ -1,10 +1,9 @@
 use common::traits::{IMUReadings, IMUSample, IMUUntimedSample};
 use common::types::sensors::SensorType;
 use dashmap::DashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-pub(crate) async fn clone_and_clear<T, S>(buffer: Arc<DashMap<SensorType, Mutex<T>>>) -> Vec<T>
+pub(crate) fn clone_and_clear<T, S>(buffer: Arc<DashMap<SensorType, Mutex<T>>>) -> Vec<T>
 where
     S: IMUSample,
     T: Send + Sync + IMUReadings<S> + 'static,
@@ -15,7 +14,7 @@ where
     let mut buffer_clone: Vec<T> = Vec::new();
     for sensor_type in sensor_types {
         if let Some(mutex) = buffer.get(&sensor_type) {
-            let mut data = mutex.lock().await;
+            let mut data = mutex.lock().unwrap();
             buffer_clone.push(data.clone());
             data.clear();
         }
@@ -30,8 +29,8 @@ mod tests {
     use common::types::timed::Sample3D;
     use uuid::Uuid;
 
-    #[tokio::test]
-    async fn test_clone_and_clear() {
+    #[test]
+    fn test_clone_and_clear() {
         let sensor_type = SensorType::Accelerometer(Uuid::new_v4());
         let sample = Sample3D::new(0.0, [1.0, 2.0, 3.0]);
         let mut readings = SensorReadings::new("Test", sensor_type.clone());
@@ -41,7 +40,7 @@ mod tests {
         readings.add_sample(sample.clone());
         buffer.insert(sensor_type.clone(), Mutex::new(readings));
 
-        let result = clone_and_clear(buffer.clone()).await;
+        let result = clone_and_clear(buffer.clone());
 
         // Check that buffer is cloned
         assert_eq!(result.len(), 1);
@@ -52,12 +51,12 @@ mod tests {
         );
         // check that buffer is cleared
         let buffer = buffer.get(&sensor_type).unwrap();
-        let buffer = buffer.lock().await;
+        let buffer = buffer.lock().unwrap();
         assert!(buffer.is_empty());
     }
 
-    #[tokio::test]
-    async fn test_clone_and_clear_multiple_sensors() {
+    #[test]
+    fn test_clone_and_clear_multiple_sensors() {
         let acc_id = Uuid::new_v4();
         let sensor_type1 = SensorType::Accelerometer(acc_id);
         let sensor_type2 = SensorType::Gyroscope(Uuid::new_v4());
@@ -73,7 +72,7 @@ mod tests {
         buffer.insert(sensor_type1.clone(), Mutex::new(readings_acc));
         buffer.insert(sensor_type2.clone(), Mutex::new(readings_gyro));
 
-        let result = clone_and_clear(buffer.clone()).await;
+        let result = clone_and_clear(buffer.clone());
 
         // Check that buffer is cloned
         assert_eq!(result.len(), 2);
@@ -101,21 +100,21 @@ mod tests {
 
         // check that buffer is cleared
         let readings = buffer.get(&sensor_type1).unwrap();
-        let buffer_locked = readings.lock().await;
+        let buffer_locked = readings.lock().unwrap();
         assert!(buffer_locked.is_empty());
         drop(buffer_locked);
 
         let readings = buffer.get(&sensor_type2).unwrap();
-        let buffer_locked = readings.lock().await;
+        let buffer_locked = readings.lock().unwrap();
         assert!(buffer_locked.is_empty());
     }
 
-    #[tokio::test]
-    async fn test_clone_and_clear_empty_buffer() {
+    #[test]
+    fn test_clone_and_clear_empty_buffer() {
         let buffer: Arc<DashMap<SensorType, Mutex<SensorReadings<Sample3D>>>> =
             Arc::new(DashMap::new());
 
-        let result = clone_and_clear(buffer.clone()).await;
+        let result = clone_and_clear(buffer.clone());
         assert_eq!(result.len(), 0);
     }
 }

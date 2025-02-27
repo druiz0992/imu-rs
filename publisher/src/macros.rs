@@ -5,10 +5,7 @@ macro_rules! listener {
         Listener::new({
             let handler = $handler.clone(); // Clone the handler
             move |id, value| {
-                let handler = handler.clone(); // Clone inside the closure
-                async move {
-                    handler.$method(id, value).await; // Call the method on the handler
-                }
+                handler.$method(id, value); // Call the method on the handler
             }
         })
     };

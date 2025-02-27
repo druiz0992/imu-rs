@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -61,37 +60,35 @@ where
     fn filter_batch(&mut self, samples: Vec<T>) -> Result<Vec<T>, &str>;
 }
 
-#[async_trait]
 pub trait IMUSource<T, S>: Send + Sync
 where
     T: Send + Sync + IMUReadings<S>,
     S: Send + Sync + IMUSample,
 {
     fn get_tag(&self) -> &str;
-    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String>;
-    async fn unregister_listener(&self, id: Uuid);
-    async fn register_listener(
+    fn get_available_sensors(&self) -> Vec<SensorType>;
+    fn unregister_listener(&self, id: Uuid);
+    fn register_listener(
         &self,
         listener: &mut dyn Notifiable<T>,
         sensor_type: &SensorType,
     ) -> Result<Uuid, String>;
-    async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<T>);
+    fn notify_listeners(&self, sensor_type: SensorType, data: Arc<T>);
 }
 
-#[async_trait]
 pub trait IMUSink<T, S>: Send + Sync
 where
     T: Send + Sync + IMUReadings<S>,
     S: Send + Sync + IMUSample,
 {
-    async fn attach_listeners(
+    fn attach_listeners(
         &self,
         source: &dyn IMUSource<T, S>,
         sensor_cluster: &[SensorType],
     ) -> Result<Vec<Uuid>, String>;
-    async fn detach_listener(&self, source: &dyn IMUSource<T, S>, id: Uuid) {
-        source.unregister_listener(id).await;
+    fn detach_listener(&self, source: &dyn IMUSource<T, S>, id: Uuid) {
+        source.unregister_listener(id);
     }
 
-    async fn process_samples(&self, listener_id: Uuid, samples: Arc<T>);
+    fn process_samples(&self, listener_id: Uuid, samples: Arc<T>);
 }

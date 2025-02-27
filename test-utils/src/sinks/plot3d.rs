@@ -1,14 +1,11 @@
-use async_trait::async_trait;
 use gnuplot::{AxesCommon, Color, Figure};
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::{Sample3D, SampleQuaternion};
-use publisher::listener;
-use publisher::Listener;
+use publisher::{listener, Listener};
 
 use crate::renderable::{Renderable3D, RigidBody};
 
@@ -34,13 +31,13 @@ where
         }
     }
 
-    async fn clear_axes(&self) {
-        let mut fg = self.fg.lock().await;
+    fn clear_axes(&self) {
+        let mut fg = self.fg.lock().unwrap();
         fg.clear_axes();
     }
 
-    async fn set_grid(&self, flag: bool) {
-        let mut fg = self.fg.lock().await;
+    fn set_grid(&self, flag: bool) {
+        let mut fg = self.fg.lock().unwrap();
         fg.clear_axes()
             .axes3d()
             .set_x_grid(flag)
@@ -49,13 +46,13 @@ where
             .set_x_ticks(None, &[], &[]);
     }
 
-    pub async fn clear(&self) {
-        self.clear_axes().await;
-        self.set_grid(false).await;
+    pub fn clear(&self) {
+        self.clear_axes();
+        self.set_grid(false);
     }
 
-    pub async fn update(&self, vertices: &[(f64, f64, f64)]) {
-        let mut fg = self.fg.lock().await;
+    pub fn update(&self, vertices: &[(f64, f64, f64)]) {
+        let mut fg = self.fg.lock().unwrap();
         fg.clear_axes();
         let ax = fg
             .axes3d()
@@ -77,12 +74,11 @@ where
     }
 }
 
-#[async_trait]
 impl<R> IMUSink<SensorReadings<SampleQuaternion>, SampleQuaternion> for Plot3D<R>
 where
     R: Renderable3D + RigidBody + Send + Sync + Clone + 'static,
 {
-    async fn attach_listeners(
+    fn attach_listeners(
         &self,
         source: &dyn IMUSource<SensorReadings<SampleQuaternion>, SampleQuaternion>,
         sensor_cluster: &[SensorType],
@@ -90,16 +86,16 @@ where
         let mut listener = listener!(self.process_samples);
         let mut ids = Vec::with_capacity(sensor_cluster.len());
         for sensor_type in sensor_cluster {
-            match source.register_listener(&mut listener, sensor_type).await {
+            match source.register_listener(&mut listener, sensor_type) {
                 Ok(id) => {
                     ids.push(id);
                 }
                 Err(e) => return Err(e),
             }
         }
-        return Ok(ids);
+        Ok(ids)
     }
-    async fn detach_listener(
+    fn detach_listener(
         &self,
         _source: &dyn IMUSource<SensorReadings<SampleQuaternion>, SampleQuaternion>,
         _id: Uuid,
@@ -107,21 +103,20 @@ where
         todo!();
     }
 
-    async fn process_samples(&self, _id: Uuid, samples: Arc<SensorReadings<SampleQuaternion>>) {
+    fn process_samples(&self, _id: Uuid, samples: Arc<SensorReadings<SampleQuaternion>>) {
         if let Some(q) = samples.get_samples().first() {
             let q = q.get_measurement().inner();
             let rotated_vertices = self.object_3d.rotate(&q);
-            self.update(&rotated_vertices).await;
+            self.update(&rotated_vertices);
         }
     }
 }
 
-#[async_trait]
 impl<R> IMUSink<SensorReadings<Sample3D>, Sample3D> for Plot3D<R>
 where
     R: Renderable3D + RigidBody + Send + Sync + Clone + 'static,
 {
-    async fn attach_listeners(
+    fn attach_listeners(
         &self,
         source: &dyn IMUSource<SensorReadings<Sample3D>, Sample3D>,
         sensor_cluster: &[SensorType],
@@ -129,16 +124,16 @@ where
         let mut listener = listener!(self.process_samples);
         let mut ids = Vec::with_capacity(sensor_cluster.len());
         for sensor_type in sensor_cluster {
-            match source.register_listener(&mut listener, sensor_type).await {
+            match source.register_listener(&mut listener, sensor_type) {
                 Ok(id) => {
                     ids.push(id);
                 }
                 Err(e) => return Err(e),
             }
         }
-        return Ok(ids);
+        Ok(ids)
     }
-    async fn detach_listener(
+    fn detach_listener(
         &self,
         _source: &dyn IMUSource<SensorReadings<Sample3D>, Sample3D>,
         _id: Uuid,
@@ -146,11 +141,11 @@ where
         todo!();
     }
 
-    async fn process_samples(&self, _id: Uuid, samples: Arc<SensorReadings<Sample3D>>) {
+    fn process_samples(&self, _id: Uuid, samples: Arc<SensorReadings<Sample3D>>) {
         if let Some(acc) = samples.get_samples().first() {
             let acc = nalgebra::Vector3::from_vec(acc.get_measurement().inner().to_vec());
             let traslated_vertices = self.object_3d.translate(&acc);
-            self.update(&traslated_vertices).await;
+            self.update(&traslated_vertices);
         }
     }
 }

@@ -108,6 +108,30 @@ impl Phyphox {
         log::info!("Stopping recording...");
         self.control(STOP_CMD).await
     }
+
+    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
+        let json = self
+            .fetch_json(CONFIG_CMD)
+            .await
+            .map_err(|_| "Error retrieving available sensors".to_string())?;
+        let mut available_sensors: Vec<SensorType> = vec![];
+
+        let sensor_uuids = helpers::extract_uuids(&self.sensor_cluster);
+
+        if let Some(exports) = json.get("export").and_then(|e| e.as_array()) {
+            available_sensors = exports
+                .iter()
+                .filter_map(|entry| {
+                    entry
+                        .get("set")
+                        .and_then(|s| s.as_str())
+                        .and_then(|s| helpers::to_type_id(s, &sensor_uuids))
+                        .and_then(|s| s.try_into().ok())
+                })
+                .collect();
+        }
+        Ok(available_sensors)
+    }
 }
 
 #[async_trait]
@@ -192,7 +216,7 @@ impl PhyphoxPort for Phyphox {
                                if let Ok(filtered_data) = filtered_data {
                                     let buffer = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), filtered_data);
                                     if let Some(publisher) = publisher.as_ref() {
-                                        publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;
+                                        publisher[sensor_idx].notify_listeners(Arc::new(buffer));
                                     }
                                 }
                             }
@@ -212,30 +236,6 @@ impl PhyphoxPort for Phyphox {
         self.sensor_cluster_tag.as_str()
     }
 
-    /// Returns available sensors in phyphox
-    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
-        let json = self
-            .fetch_json(CONFIG_CMD)
-            .await
-            .map_err(|_| "Error retrieving available sensors".to_string())?;
-        let mut available_sensors: Vec<SensorType> = vec![];
-
-        let sensor_uuids = helpers::extract_uuids(&self.sensor_cluster);
-
-        if let Some(exports) = json.get("export").and_then(|e| e.as_array()) {
-            available_sensors = exports
-                .iter()
-                .filter_map(|entry| {
-                    entry
-                        .get("set")
-                        .and_then(|s| s.as_str())
-                        .and_then(|s| helpers::to_type_id(s, &sensor_uuids))
-                        .and_then(|s| s.try_into().ok())
-                })
-                .collect();
-        }
-        Ok(available_sensors)
-    }
     fn get_sensor_cluster(&self) -> Vec<SensorType> {
         self.sensor_cluster.clone()
     }

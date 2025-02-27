@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use log::error;
 use publisher::PublisherManager;
 use std::sync::Arc;
@@ -53,7 +52,7 @@ where
     ) -> Result<(), PhyphoxError> {
         let abort_signal = self.abort_signal.clone();
         shutdown::listen_for_shutdown(Arc::clone(&abort_signal), run_for_millis);
-        let publishers = self.publishers.get_publishers_sorted_by_index().await;
+        let publishers = self.publishers.get_publishers_sorted_by_index();
         self.client
             .start(
                 period_millis,
@@ -64,33 +63,32 @@ where
     }
 }
 
-#[async_trait]
 impl<C> IMUSource<SensorReadings<Sample3D>, Sample3D> for PhyphoxService<C>
 where
     C: PhyphoxPort + Send + Sync,
 {
-    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
-        self.client.get_available_sensors().await
+    fn get_available_sensors(&self) -> Vec<SensorType> {
+        self.client.get_sensor_cluster()
     }
 
     fn get_tag(&self) -> &str {
         self.client.get_tag()
     }
 
-    async fn unregister_listener(&self, id: Uuid) {
-        let _ = self.publishers.remove_listener(id).await;
+    fn unregister_listener(&self, id: Uuid) {
+        let _ = self.publishers.remove_listener(id);
     }
 
-    async fn register_listener(
+    fn register_listener(
         &self,
         listener: &mut dyn Notifiable<SensorReadings<Sample3D>>,
         sensor_type: &SensorType,
     ) -> Result<Uuid, String> {
-        self.publishers.add_listener(listener, sensor_type).await
+        self.publishers.add_listener(listener, sensor_type)
     }
 
-    async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<SensorReadings<Sample3D>>) {
-        self.publishers.notify_listeners(sensor_type, data).await
+    fn notify_listeners(&self, sensor_type: SensorType, data: Arc<SensorReadings<Sample3D>>) {
+        self.publishers.notify_listeners(sensor_type, data);
     }
 }
 

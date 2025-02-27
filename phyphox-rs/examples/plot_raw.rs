@@ -18,7 +18,7 @@ async fn main() {
 
     let plot_refresh_period_millis = 200.0;
     let plot_window_size_samples = 200;
-    let plot_1d = Plot1D::new("Raw", sensor_cluster.clone(), plot_window_size_samples).await;
+    let plot_1d = Plot1D::new("Raw", sensor_cluster.clone(), plot_window_size_samples);
     plot_1d.start(plot_refresh_period_millis);
 
     let tag = "Test";
@@ -32,7 +32,6 @@ async fn main() {
         &*phyphox,
         &sensor_cluster.clone(),
     )
-    .await
     .unwrap();
 
     let timeout_duration = Duration::from_secs(200);

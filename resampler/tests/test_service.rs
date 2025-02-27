@@ -63,15 +63,12 @@ async fn test_resampler_pipeline() {
     // connect resampler to phyphox
     resampler
         .attach_listeners(&*phyphox, &sensor_cluster)
-        .await
         .unwrap();
 
     // connect samples from resampler
     let mut sink = SinkMock::new();
     sink.register_callback(process_samples);
-    sink.attach_listeners(&*resampler, &sensor_cluster)
-        .await
-        .unwrap();
+    sink.attach_listeners(&*resampler, &sensor_cluster).unwrap();
 
     // Timeout duration: 5 seconds
     let timeout_duration = Duration::from_secs(1);

@@ -22,6 +22,5 @@ pub trait PhyphoxPort {
     ) -> Result<(), PhyphoxError>;
 
     fn get_tag(&self) -> &str;
-    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String>;
     fn get_sensor_cluster(&self) -> Vec<SensorType>;
 }

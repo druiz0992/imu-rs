@@ -176,7 +176,7 @@ impl PhyphoxPort for PhyphoxMock {
                         if !samples.is_empty() {
                             let buffer = SensorReadings::from_vec(&self.sensor_cluster_tag, sensor.clone(), samples);
                             if let Some(publisher) = publisher.as_ref() {
-                                publisher[sensor_idx].notify_listeners(Arc::new(buffer)).await;
+                                publisher[sensor_idx].notify_listeners(Arc::new(buffer));
                             };
                         }
                     }
@@ -194,9 +194,6 @@ impl PhyphoxPort for PhyphoxMock {
         self.sensor_cluster_tag.as_str()
     }
 
-    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
-        Ok(self.sensor_cluster.clone())
-    }
     fn get_sensor_cluster(&self) -> Vec<SensorType> {
         self.sensor_cluster.clone()
     }

@@ -1,15 +1,12 @@
-use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
 use common::traits::{IMUSample, IMUSink, IMUSource};
 use common::types::sensors::{SensorReadings, SensorType};
-use publisher::listener;
-use publisher::Listener;
+use publisher::{listener, Listener};
 
-type MockCallback<T> =
+type MockAsyncCallback<T> =
     Arc<Option<Arc<dyn Fn(MockValue, SensorType, Arc<SensorReadings<T>>) + Send + Sync>>>;
 
 #[derive(Clone)]
@@ -27,7 +24,7 @@ impl Default for MockValue {
 #[derive(Clone, Default)]
 pub struct SinkMock<T> {
     control: Arc<RwLock<HashMap<Uuid, SensorType>>>,
-    callback: MockCallback<T>,
+    callback: MockAsyncCallback<T>,
     value: MockValue,
 }
 
@@ -55,12 +52,11 @@ where
     }
 }
 
-#[async_trait]
 impl<T> IMUSink<SensorReadings<T>, T> for SinkMock<T>
 where
     T: IMUSample,
 {
-    async fn attach_listeners(
+    fn attach_listeners(
         &self,
         source: &dyn IMUSource<SensorReadings<T>, T>,
         sensor_cluster: &[SensorType],
@@ -68,25 +64,25 @@ where
         let mut listener = listener!(self.process_samples);
         let mut ids = Vec::with_capacity(sensor_cluster.len());
         for sensor_type in sensor_cluster {
-            match source.register_listener(&mut listener, sensor_type).await {
+            match source.register_listener(&mut listener, sensor_type) {
                 Ok(id) => {
-                    let mut control = self.control.write().await;
+                    let mut control = self.control.write().unwrap();
                     control.insert(id, sensor_type.clone());
                     ids.push(id);
                 }
                 Err(e) => return Err(e),
             }
         }
-        return Ok(ids);
+        Ok(ids)
     }
-    async fn detach_listener(&self, source: &dyn IMUSource<SensorReadings<T>, T>, id: Uuid) {
-        source.unregister_listener(id).await;
-        let mut control = self.control.write().await;
+    fn detach_listener(&self, source: &dyn IMUSource<SensorReadings<T>, T>, id: Uuid) {
+        source.unregister_listener(id);
+        let mut control = self.control.write().unwrap();
         control.remove_entry(&id);
     }
 
-    async fn process_samples(&self, id: Uuid, samples: Arc<SensorReadings<T>>) {
-        let control = self.control.read().await;
+    fn process_samples(&self, id: Uuid, samples: Arc<SensorReadings<T>>) {
+        let control = self.control.read().unwrap();
         if let Some(sensor_type) = control.get(&id) {
             if let Some(cb) = self.callback.as_ref() {
                 cb(self.value.clone(), sensor_type.clone(), samples);

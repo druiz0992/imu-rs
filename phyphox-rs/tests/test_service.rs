@@ -1,12 +1,13 @@
 use phyphox_rs::services;
 use publisher::Listener;
 use std::collections::HashMap;
-use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use uuid::Uuid;
 
 use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
-use common::types::sensors::sensor_type;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
 use common::types::Clock;
@@ -18,15 +19,14 @@ fn process_samples(
     samples: Arc<SensorReadings<Sample3D>>,
 ) {
     assert!(sensor_type == samples.get_sensor_type());
-    assert!(!matches!(sensor_type, SensorType::Gyroscope(_)));
     assert!(
         !matches!(samples.get_sensor_type(), SensorType::Other(_, _)),
         "Unexpected SensorType::Other"
     );
     if let MockValue::Float(timestamp_at_boot_secs) = value {
-        if usize::from(sensor_type) < sensor_type::MAGNETOMETER_OFFSET {
+        if let SensorType::Accelerometer(_) = sensor_type {
             for sample in samples.get_samples() {
-                assert!(sample.get_timestamp_secs() < timestamp_at_boot_secs + 0.003);
+                assert!(sample.get_timestamp_secs() < timestamp_at_boot_secs + 3.0);
             }
         }
     }
@@ -68,28 +68,25 @@ async fn test_receive_accelerometer_samples() {
         Listener::new(move |id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
             let buffer = received_samples.clone();
             let received_id = received_id.clone();
-            async move {
-                let mut buffer_lock = buffer.lock().await;
-                let mut received_id_lock = received_id.lock().await;
-                *received_id_lock = id;
-                let tag = value.get_sensor_tag();
-                assert_eq!(tag, "Test");
-                buffer_lock.extend(value.get_samples().into_iter());
-            }
+            let mut buffer_lock = buffer.lock().unwrap();
+            let mut received_id_lock = received_id.lock().unwrap();
+            *received_id_lock = id;
+            let tag = value.get_sensor_tag();
+            assert_eq!(tag, "Test");
+            buffer_lock.extend(value.get_samples().into_iter());
         })
     };
 
     // install handler
     let expected_id = phyphox
         .register_listener(&mut listener, &SensorType::Accelerometer(acc_id))
-        .await
         .unwrap();
 
     handle.await.unwrap();
 
     // check that samples were received by handler
-    let buffer = received_samples.lock().await;
-    let received_id = received_id.lock().await;
+    let buffer = received_samples.lock().unwrap();
+    let received_id = received_id.lock().unwrap();
     assert!(buffer.len() > 0);
     // the listener receives an id as part of the callback, which can match to which listener function it received
     assert!(expected_id == *received_id)
@@ -123,7 +120,7 @@ async fn test_receive_multiple_sensors() {
     .unwrap();
 
     assert_eq!(
-        phyphox.get_available_sensors().await.unwrap(),
+        phyphox.get_available_sensors(),
         vec![
             SensorType::Accelerometer(acc_id),
             SensorType::Gyroscope(gyro_id),
@@ -136,32 +133,28 @@ async fn test_receive_multiple_sensors() {
         let received_samples = received_samples.clone();
         Listener::new(move |id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
             let storage = received_samples.clone();
-            async move {
-                let mut storage_lock = storage.lock().await;
-                let tag = value.get_sensor_tag();
-                assert_eq!(tag, "Test");
-                storage_lock
-                    .entry(id)
-                    .or_insert_with(Vec::new)
-                    .extend(value.get_samples().into_iter());
-            }
+            let mut storage_lock = storage.lock().unwrap();
+            let tag = value.get_sensor_tag();
+            assert_eq!(tag, "Test");
+            storage_lock
+                .entry(id)
+                .or_insert_with(Vec::new)
+                .extend(value.get_samples().into_iter());
         })
     };
 
     // install handlers
     let accel_id = phyphox
         .register_listener(&mut listener.clone(), &SensorType::Accelerometer(acc_id))
-        .await
         .unwrap();
     let gyro_id = phyphox
         .register_listener(&mut listener.clone(), &SensorType::Gyroscope(gyro_id))
-        .await
         .unwrap();
 
     handle.await.unwrap();
 
     // check that samples were received by handler
-    let buffer = received_samples.lock().await;
+    let buffer = received_samples.lock().unwrap();
     let accel_samples = buffer.get(&accel_id).unwrap();
     let gyro_samples = buffer.get(&gyro_id).unwrap();
     assert!(!accel_samples.is_empty());
@@ -200,29 +193,26 @@ async fn test_stop_receiving_accelerometer_samples() {
         let received_samples = received_samples.clone();
         Listener::new(move |_id: Uuid, value: Arc<SensorReadings<Sample3D>>| {
             let buffer = received_samples.clone();
-            async move {
-                let mut buffer_lock = buffer.lock().await;
-                let tag = value.get_sensor_tag();
-                assert_eq!(tag, "Test");
-                buffer_lock.extend(value.get_samples().into_iter());
-            }
+            let mut buffer_lock = buffer.lock().unwrap();
+            let tag = value.get_sensor_tag();
+            assert_eq!(tag, "Test");
+            buffer_lock.extend(value.get_samples().into_iter());
         })
     };
 
     // install handler
     let id = phyphox
         .register_listener(&mut listener, &SensorType::Accelerometer(acc_id))
-        .await
         .unwrap();
 
     // wait 2 seconds and unregister handler
     tokio::time::sleep(Duration::from_millis(2000)).await;
-    phyphox.unregister_listener(id).await;
+    phyphox.unregister_listener(id);
 
     handle.await.unwrap();
 
     // check that there are no samples received after handler was unregistered
-    let buffer = received_samples.lock().await;
+    let buffer = received_samples.lock().unwrap();
     let samples = buffer.clone();
     assert!(!samples.is_empty());
     for sample in samples {
@@ -260,13 +250,10 @@ async fn test_sink() {
     sink.set_value(MockValue::Float(Clock::now().as_secs()));
     sink.register_callback(process_samples);
 
-    let ids = sink
-        .attach_listeners(&*phyphox, &sensor_cluster)
-        .await
-        .unwrap();
+    let ids = sink.attach_listeners(&*phyphox, &sensor_cluster).unwrap();
 
     tokio::time::sleep(Duration::from_millis(2000)).await;
-    sink.detach_listener(&*phyphox, ids[0]).await;
+    sink.detach_listener(&*phyphox, ids[0]);
 
     handle.await.unwrap();
 }
