@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use uuid::Uuid;
 
-use common::traits::Notifiable;
-use common::types::Callback;
+use imu_common::traits::Notifiable;
+use imu_common::types::Callback;
 
 #[derive(Clone)]
 pub struct Listener<T> {

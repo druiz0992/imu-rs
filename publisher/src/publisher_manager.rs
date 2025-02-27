@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::Publishable;
 
 use super::publisher::Publisher;
-use common::traits::publisher::Notifiable;
+use imu_common::traits::publisher::Notifiable;
 
 /// This module defines the `PublisherManager` struct, which manages publishers and their listeners.
 /// It provides functionality to add and remove publishers, as well as to add and remove listeners
@@ -20,8 +20,8 @@ use common::traits::publisher::Notifiable;
 /// use uuid::Uuid;
 /// use publisher::PublisherManager;
 /// use publisher::{listener, Listener};
-/// use common::types::sensors::SensorType;
-/// use common::types::timed::Sample3D;
+/// use imu_common::types::sensors::SensorType;
+/// use imu_common::types::timed::Sample3D;
 /// use std::sync::Arc;
 ///
 ///
@@ -145,8 +145,8 @@ where
 mod tests {
     use super::*;
     use crate::{listener, Listener};
-    use common::types::sensors::SensorType;
-    use common::types::timed::Sample3D;
+    use imu_common::types::sensors::SensorType;
+    use imu_common::types::timed::Sample3D;
 
     #[derive(Debug, Clone)]
     struct TestBuffer;

@@ -16,10 +16,10 @@ use std::marker::PhantomData;
 /// ## Example
 ///
 /// ```rust
-/// use common::types::filters::Average;
-/// use common::types::timed::Sample3D;
-/// use common::types::untimed::XYZ;
-/// use common::traits::imu::{IMUFilter, IMUSample};
+/// use imu_common::types::filters::Average;
+/// use imu_common::types::timed::Sample3D;
+/// use imu_common::types::untimed::XYZ;
+/// use imu_common::traits::imu::{IMUFilter, IMUSample};
 ///
 /// let mut avg =Average::<XYZ>::new();
 /// let samples = vec![

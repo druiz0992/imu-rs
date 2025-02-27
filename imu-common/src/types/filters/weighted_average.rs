@@ -14,9 +14,9 @@ use std::marker::PhantomData;
 /// # Example
 ///
 /// ```rust
-/// use common::types::filters::WeightedAverage;
-/// use common::traits::IMUFilter;
-/// use common::types::timed::Sample3D;
+/// use imu_common::types::filters::WeightedAverage;
+/// use imu_common::traits::IMUFilter;
+/// use imu_common::types::timed::Sample3D;
 ///
 /// // define filter with midpoint at timestamp 5.0
 /// let mut filter = WeightedAverage::new(5.0);

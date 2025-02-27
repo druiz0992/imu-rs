@@ -1,9 +1,9 @@
 use crate::utils;
-use common::types::filters::Average;
-use common::types::filters::WeightedAverage;
+use imu_common::types::filters::Average;
+use imu_common::types::filters::WeightedAverage;
 
-use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUUntimedSample};
-use common::types::sensors::SensorType;
+use imu_common::traits::{IMUFilter, IMUReadings, IMUSample, IMUUntimedSample};
+use imu_common::types::sensors::SensorType;
 
 use super::cache::{Cache, Interpolable};
 
@@ -127,8 +127,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::types::sensors::SensorReadings;
-    use common::types::timed::Sample3D;
+    use imu_common::types::sensors::SensorReadings;
+    use imu_common::types::timed::Sample3D;
     use uuid::Uuid;
 
     #[tokio::test]

@@ -1,6 +1,6 @@
-use common::traits::imu::IMUFilter;
-use common::traits::{IMUSample, IMUUntimedSample};
-use common::types::filters::{Average, WeightedAverage};
+use imu_common::traits::imu::IMUFilter;
+use imu_common::traits::{IMUSample, IMUUntimedSample};
+use imu_common::types::filters::{Average, WeightedAverage};
 
 /// Computes the simple average of the time, x, y, and z components of the given samples.
 ///
@@ -50,7 +50,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::types::timed::Sample3D;
+    use imu_common::types::timed::Sample3D;
 
     #[test]
     fn test_compute_average() {

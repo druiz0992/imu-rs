@@ -8,10 +8,10 @@ mod utils;
 use std::sync::Arc;
 
 use crate::pipeline::cache::{Cache, Interpolable};
-use common::traits::imu::{IMUFilter, IMUUntimedSample};
-use common::traits::{IMUReadings, IMUSample};
-use common::types::filters::{Average, MovingAverage, WeightedAverage};
-use common::types::sensors::SensorType;
+use imu_common::traits::imu::{IMUFilter, IMUUntimedSample};
+use imu_common::traits::{IMUReadings, IMUSample};
+use imu_common::types::filters::{Average, MovingAverage, WeightedAverage};
+use imu_common::types::sensors::SensorType;
 
 /// Runs the main application logic asynchronously, managing sensors and data processing.
 /// Returns a `tokio::task::JoinHandle` representing the asynchronous task running the main logic.

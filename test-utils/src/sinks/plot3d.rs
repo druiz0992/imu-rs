@@ -2,9 +2,9 @@ use gnuplot::{AxesCommon, Color, Figure};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::{Sample3D, SampleQuaternion};
+use imu_common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::{Sample3D, SampleQuaternion};
 use publisher::{listener, Listener};
 
 use crate::renderable::{Renderable3D, RigidBody};

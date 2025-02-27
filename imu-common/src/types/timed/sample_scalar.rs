@@ -5,9 +5,9 @@ use crate::types::untimed::Scalar;
 /// # Examples
 ///
 /// ```
-/// use common::traits::IMUSample;
-/// use common::types::timed::SampleScalar;
-/// use common::types::untimed::Scalar;
+/// use imu_common::traits::IMUSample;
+/// use imu_common::types::timed::SampleScalar;
+/// use imu_common::types::untimed::Scalar;
 ///
 /// let timestamp = 1627846267.0;
 /// let measurement =1.0;

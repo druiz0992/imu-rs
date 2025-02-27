@@ -3,10 +3,10 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use super::ResamplerPipeline;
-use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSink, IMUSource};
-use common::types::filters::Average;
-use common::types::filters::WeightedAverage;
-use common::types::sensors::SensorType;
+use imu_common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSink, IMUSource};
+use imu_common::types::filters::Average;
+use imu_common::types::filters::WeightedAverage;
+use imu_common::types::sensors::SensorType;
 
 impl<T, S> IMUSink<T, S> for ResamplerPipeline<T, S>
 where

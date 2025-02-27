@@ -2,9 +2,9 @@ use resampler_rs::run;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use common::traits::IMUSink;
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::Sample3D;
+use imu_common::traits::IMUSink;
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::Sample3D;
 use phyphox_rs::services;
 use resampler_rs::SmothingPolicy;
 use test_utils::sinks::{MockValue, SinkMock};

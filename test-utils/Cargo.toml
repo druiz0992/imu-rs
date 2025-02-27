@@ -13,6 +13,6 @@ dashmap.workspace = true
 
 gnuplot = "0.0.42"
 
-common = {path= "../common"}
+imu_common = {path= "../imu-common"}
 publisher = {path = "../publisher"}
 

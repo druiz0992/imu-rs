@@ -3,9 +3,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use ahrs_rs::AHRSFilter;
-use common::traits::IMUSink;
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::{Sample3D, SampleQuaternion};
+use imu_common::traits::IMUSink;
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::{Sample3D, SampleQuaternion};
 use phyphox_rs::services;
 use resampler_rs::SmothingPolicy;
 use test_utils::sinks::{MockValue, SinkMock};

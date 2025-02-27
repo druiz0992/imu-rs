@@ -7,9 +7,9 @@ use crate::types::untimed::UnitQuaternion;
 /// # Examples
 ///
 /// ```
-/// use common::types::timed::SampleQuaternion;
-/// use common::types::untimed::UnitQuaternion;
-/// use common::traits::IMUSample;
+/// use imu_common::types::timed::SampleQuaternion;
+/// use imu_common::types::untimed::UnitQuaternion;
+/// use imu_common::traits::IMUSample;
 ///
 /// let timestamp = 1627846267.0;
 /// let measurement = [1.0, 0.0, 0.0, 0.0];

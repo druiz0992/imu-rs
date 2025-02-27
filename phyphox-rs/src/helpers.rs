@@ -1,10 +1,10 @@
 use serde_json::Value;
 use uuid::Uuid;
 
-use common::types::sensors::sensor_type;
-use common::types::sensors::SensorType;
-use common::types::untimed::xyz::N_XYZ_COORDINATES;
-use common::types::XYZ;
+use imu_common::types::sensors::sensor_type;
+use imu_common::types::sensors::SensorType;
+use imu_common::types::untimed::xyz::N_XYZ_COORDINATES;
+use imu_common::types::XYZ;
 
 use crate::models::errors::PhyphoxError;
 

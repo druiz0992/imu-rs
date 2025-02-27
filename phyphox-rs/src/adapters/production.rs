@@ -13,12 +13,12 @@ use serde_json::Value;
 use tokio::sync::Notify;
 use tokio::time::{interval, MissedTickBehavior};
 
-use common::traits::{IMUFilter, IMUReadings, IMUSample};
-use common::types::filters::moving_average::MovingAverage;
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::Sample3D;
-use common::types::untimed::XYZ;
-use common::types::Clock;
+use imu_common::traits::{IMUFilter, IMUReadings, IMUSample};
+use imu_common::types::filters::moving_average::MovingAverage;
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::Sample3D;
+use imu_common::types::untimed::XYZ;
+use imu_common::types::Clock;
 use publisher::{Publishable, Publisher};
 
 use crate::constants::N_SENSORS;

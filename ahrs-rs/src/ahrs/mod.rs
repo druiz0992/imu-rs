@@ -8,10 +8,10 @@ use ahrs::{Ahrs, Madgwick};
 
 use crate::utils;
 use buffer::{AHRSInputSamples, SensorIndex, N_SENSORS};
-use common::traits::IMUSample;
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::SampleQuaternion;
-use common::types::untimed::UnitQuaternion;
+use imu_common::traits::IMUSample;
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::SampleQuaternion;
+use imu_common::types::untimed::UnitQuaternion;
 use publisher::PublisherManager;
 
 const MADGWICK_BETA: f64 = 0.08;
@@ -112,8 +112,8 @@ impl AHRSFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::traits::IMUSample;
-    use common::types::timed::Sample3D;
+    use imu_common::traits::IMUSample;
+    use imu_common::types::timed::Sample3D;
     use nalgebra::Vector3;
     use test_utils::csv_loader;
     use uuid::Uuid;

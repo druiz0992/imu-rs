@@ -5,8 +5,8 @@ pub mod source;
 
 pub(crate) use resampler::Resampler;
 
-use common::types::filters::Average;
-use common::types::filters::WeightedAverage;
+use imu_common::types::filters::Average;
+use imu_common::types::filters::WeightedAverage;
 use dashmap::DashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
@@ -15,10 +15,10 @@ use std::time::{Duration, Instant};
 use crate::pipeline::cache::{Cache, Interpolable};
 use crate::utils;
 use crate::SmothingPolicy;
-use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSource, IMUUntimedSample};
-use common::types::filters::MovingAverage;
-use common::types::sensors::SensorType;
-use common::types::Clock;
+use imu_common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSource, IMUUntimedSample};
+use imu_common::types::filters::MovingAverage;
+use imu_common::types::sensors::SensorType;
+use imu_common::types::Clock;
 use publisher::PublisherManager;
 
 const MIN_RESAMPLING_PERIOD_MILLIS: f64 = 5.0;
@@ -115,10 +115,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::traits::IMUSink;
-    use common::traits::Notifiable;
-    use common::types::sensors::SensorReadings;
-    use common::types::timed::Sample3D;
+    use imu_common::traits::IMUSink;
+    use imu_common::traits::Notifiable;
+    use imu_common::types::sensors::SensorReadings;
+    use imu_common::types::timed::Sample3D;
     use publisher::{listener, Listener};
     use std::sync::mpsc;
     use uuid::Uuid;

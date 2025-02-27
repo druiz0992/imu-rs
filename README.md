@@ -18,9 +18,9 @@ Here's a basic example of how to use IMU-RS:
 ```rust
 use uuid::Uuid;
 
-use common::traits::{IMUReadings, IMUSample, IMUSink};
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::{Sample3D, SampleQuaternion};
+use imu_common::traits::{IMUReadings, IMUSample, IMUSink};
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::{Sample3D, SampleQuaternion};
 
 use ahrs_rs::{self, AHRSFilter};
 use phyphox_rs;

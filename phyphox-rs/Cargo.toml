@@ -18,7 +18,7 @@ futures = "0.3.31"
 async-trait = "0.1.83"
 
 publisher = { path = "../publisher"}
-common = { path = "../common"}
+imu_common = { path = "../imu-common"}
 test_utils = {path = "../test-utils"}
 
 [dev-dependencies]

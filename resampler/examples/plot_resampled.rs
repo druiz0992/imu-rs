@@ -1,8 +1,8 @@
 use uuid::Uuid;
 
-use common::traits::IMUSink;
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::Sample3D;
+use imu_common::traits::IMUSink;
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::Sample3D;
 
 use phyphox_rs;
 use resampler_rs::{self, SmothingPolicy};

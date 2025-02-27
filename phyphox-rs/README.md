@@ -18,9 +18,9 @@ In order to use the library, you need to install Phyphox App on your phone, and 
     use tokio::sync::{Mutex, RwLock};
     use uuid::Uuid;
 
-    use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
-    use common::types::sensors::{SensorReadings, SensorType};
-    use common::types::timed::Sample3D;
+    use imu_common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
+    use imu_common::types::sensors::{SensorReadings, SensorType};
+    use imu_common::types::timed::Sample3D;
     use publisher::listener;
 
     #[derive(Debug, Clone)]

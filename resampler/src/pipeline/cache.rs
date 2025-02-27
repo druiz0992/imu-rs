@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use common::traits::BasicArithmetic;
-use common::traits::{IMUSample, IMUUntimedSample};
-use common::types::buffers::CircularBuffer;
-use common::types::sensors::SensorType;
-use common::types::timed::SampleQuaternion;
-use common::types::untimed::{Scalar, UnitQuaternion, XYZ};
+use imu_common::traits::BasicArithmetic;
+use imu_common::traits::{IMUSample, IMUUntimedSample};
+use imu_common::types::buffers::CircularBuffer;
+use imu_common::types::sensors::SensorType;
+use imu_common::types::timed::SampleQuaternion;
+use imu_common::types::untimed::{Scalar, UnitQuaternion, XYZ};
 
 trait Lerp: BasicArithmetic {}
 impl Lerp for XYZ {}
@@ -151,7 +151,7 @@ impl Interpolable<SampleQuaternion, UnitQuaternion> for Cache<SampleQuaternion, 
 mod tests {
 
     use super::*;
-    use common::types::timed::Sample3D;
+    use imu_common::types::timed::Sample3D;
     use uuid::Uuid;
 
     #[test]

@@ -1,4 +1,4 @@
-use common::types::sensors::SensorType;
+use imu_common::types::sensors::SensorType;
 
 use crate::{ahrs::buffer::SensorIndex, ahrs::buffer::N_SENSORS};
 

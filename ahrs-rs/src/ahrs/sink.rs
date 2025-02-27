@@ -5,9 +5,9 @@ use uuid::Uuid;
 
 use super::AHRSFilter;
 use super::DISCARD_N_INITIAL_SAMPLES;
-use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::Sample3D;
+use imu_common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::Sample3D;
 
 impl<T> IMUSink<T, Sample3D> for AHRSFilter
 where

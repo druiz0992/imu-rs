@@ -2,10 +2,10 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::ResamplerPipeline;
-use common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSource, IMUUntimedSample, Notifiable};
-use common::types::filters::Average;
-use common::types::filters::WeightedAverage;
-use common::types::sensors::SensorType;
+use imu_common::traits::{IMUFilter, IMUReadings, IMUSample, IMUSource, IMUUntimedSample, Notifiable};
+use imu_common::types::filters::Average;
+use imu_common::types::filters::WeightedAverage;
+use imu_common::types::sensors::SensorType;
 
 impl<T, S> IMUSource<T, S> for ResamplerPipeline<T, S>
 where

@@ -6,11 +6,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
-use common::types::buffers::CircularBuffer;
-use common::types::clock::Clock;
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::Sample3D;
+use imu_common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
+use imu_common::types::buffers::CircularBuffer;
+use imu_common::types::clock::Clock;
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::Sample3D;
 use publisher::{listener, Listener};
 
 type PlotDataVec = (

@@ -10,9 +10,9 @@ use crate::adapters::{mock::PhyphoxMock, production::Phyphox};
 use crate::models::errors::PhyphoxError;
 use crate::models::shutdown;
 use crate::ports::PhyphoxPort;
-use common::traits::{IMUSource, Notifiable};
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::Sample3D;
+use imu_common::traits::{IMUSource, Notifiable};
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::Sample3D;
 
 /// Configuration of Phyphox service
 pub struct PhyphoxService<C>

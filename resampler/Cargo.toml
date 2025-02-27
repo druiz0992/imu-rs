@@ -11,7 +11,7 @@ dashmap.workspace = true
 
 publisher = { path = "../publisher"}
 phyphox_rs = { path = "../phyphox-rs"}
-common = { path = "../common"}
+imu_common = { path = "../imu-common"}
 test_utils = { path = "../test-utils"}
 
 [dev-dependencies]

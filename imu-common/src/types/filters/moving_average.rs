@@ -17,10 +17,10 @@ use crate::types::untimed::UnitQuaternion;
 /// ## Example
 ///
 /// ```rust
-/// use common::types::filters::MovingAverage;
-/// use common::types::timed::Sample3D;
-/// use common::types::untimed::XYZ;
-/// use common::traits::imu::{IMUFilter, IMUSample};
+/// use imu_common::types::filters::MovingAverage;
+/// use imu_common::types::timed::Sample3D;
+/// use imu_common::types::untimed::XYZ;
+/// use imu_common::traits::imu::{IMUFilter, IMUSample};
 ///
 /// let mut ma = MovingAverage::<XYZ>::new(3);
 /// let samples = vec![

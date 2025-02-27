@@ -1,11 +1,11 @@
 use uuid::Uuid;
 
-use common::traits::{IMUReadings, IMUSample, IMUSink};
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::{Sample3D, SampleQuaternion};
+use imu_common::traits::{IMUReadings, IMUSample, IMUSink};
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::{Sample3D, SampleQuaternion};
 
 use ahrs_rs::{self, AHRSFilter};
-use common::types::clock::Clock;
+use imu_common::types::clock::Clock;
 use phyphox_rs;
 use resampler_rs::{self, SmothingPolicy};
 use std::sync::Arc;

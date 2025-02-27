@@ -1,7 +1,7 @@
 use nalgebra::Vector3;
 
 use crate::utils;
-use common::types::sensors::SensorType;
+use imu_common::types::sensors::SensorType;
 
 pub(crate) const N_SENSORS: usize = 3;
 pub(crate) enum SensorIndex {

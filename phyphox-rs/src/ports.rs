@@ -4,8 +4,8 @@ use tokio::sync::Notify;
 
 use async_trait::async_trait;
 
-use common::types::timed::Sample3D;
-use common::types::{SensorReadings, SensorType};
+use imu_common::types::timed::Sample3D;
+use imu_common::types::{SensorReadings, SensorType};
 use publisher::Publisher;
 
 use crate::models::errors::PhyphoxError;

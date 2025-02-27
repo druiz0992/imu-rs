@@ -2,9 +2,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use super::AHRSFilter;
-use common::traits::{IMUSource, Notifiable};
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::SampleQuaternion;
+use imu_common::traits::{IMUSource, Notifiable};
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::SampleQuaternion;
 
 impl IMUSource<SensorReadings<SampleQuaternion>, SampleQuaternion> for AHRSFilter {
     fn get_tag(&self) -> &str {

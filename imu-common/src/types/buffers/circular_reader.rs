@@ -12,7 +12,7 @@
 /// # Examples
 ///
 /// ```
-/// use common::types::buffers::circular_reader::CircularReader;
+/// use imu_common::types::buffers::circular_reader::CircularReader;
 ///
 /// let data = vec![10, 20, 30, 40];
 /// let mut reader = CircularReader::new(data.clone()).unwrap();

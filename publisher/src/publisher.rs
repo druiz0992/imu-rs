@@ -3,8 +3,8 @@ use rayon::prelude::*;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use common::traits::Notifiable;
-use common::types::Callback;
+use imu_common::traits::Notifiable;
+use imu_common::types::Callback;
 
 pub trait Publishable<T> {
     fn register_listener(&self, listener: &mut dyn Notifiable<T>) -> Uuid;

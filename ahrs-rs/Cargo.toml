@@ -7,7 +7,7 @@ edition = "2021"
 ahrs = "0.7.0"
 simba = "0.9.0"
 
-common = { path = "../common"}
+imu_common = { path = "../imu-common"}
 publisher = { path = "../publisher"}
 
 

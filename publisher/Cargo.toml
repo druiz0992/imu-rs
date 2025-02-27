@@ -10,7 +10,7 @@ uuid.workspace = true
 dashmap.workspace = true
 
 rayon = "1.10"
-common = { path = "../common"}
+imu_common = { path = "../imu-common"}
 
 
 

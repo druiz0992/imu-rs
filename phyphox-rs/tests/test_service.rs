@@ -7,10 +7,10 @@ use std::{
 };
 use uuid::Uuid;
 
-use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
-use common::types::sensors::{SensorReadings, SensorType};
-use common::types::timed::Sample3D;
-use common::types::Clock;
+use imu_common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
+use imu_common::types::sensors::{SensorReadings, SensorType};
+use imu_common::types::timed::Sample3D;
+use imu_common::types::Clock;
 use test_utils::sinks::{MockValue, SinkMock};
 
 fn process_samples(

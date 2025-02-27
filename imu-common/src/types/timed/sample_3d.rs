@@ -5,9 +5,9 @@ use crate::types::untimed::{xyz::N_XYZ_COORDINATES, XYZ};
 /// # Examples
 ///
 /// ```
-/// use common::types::timed::Sample3D;
-/// use common::types::untimed::XYZ;
-/// use common::traits::IMUSample;
+/// use imu_common::types::timed::Sample3D;
+/// use imu_common::types::untimed::XYZ;
+/// use imu_common::traits::IMUSample;
 ///
 /// let timestamp = 1627846267.0;
 /// let measurement = [1.0, 2.0, 3.0];

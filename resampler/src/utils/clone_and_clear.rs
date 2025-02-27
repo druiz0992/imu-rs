@@ -1,5 +1,5 @@
-use common::traits::{IMUReadings, IMUSample, IMUUntimedSample};
-use common::types::sensors::SensorType;
+use imu_common::traits::{IMUReadings, IMUSample, IMUUntimedSample};
+use imu_common::types::sensors::SensorType;
 use dashmap::DashMap;
 use std::sync::{Arc, Mutex};
 
@@ -25,8 +25,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::types::sensors::SensorReadings;
-    use common::types::timed::Sample3D;
+    use imu_common::types::sensors::SensorReadings;
+    use imu_common::types::timed::Sample3D;
     use uuid::Uuid;
 
     #[test]

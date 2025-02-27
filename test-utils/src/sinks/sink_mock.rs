@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
-use common::traits::{IMUSample, IMUSink, IMUSource};
-use common::types::sensors::{SensorReadings, SensorType};
+use imu_common::traits::{IMUSample, IMUSink, IMUSource};
+use imu_common::types::sensors::{SensorReadings, SensorType};
 use publisher::{listener, Listener};
 
 type MockAsyncCallback<T> =

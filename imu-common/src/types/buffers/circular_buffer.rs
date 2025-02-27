@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 /// # Examples
 ///
 /// ```rust
-/// use common::types::CircularBuffer;
+/// use imu_common::types::CircularBuffer;
 ///
 /// // Create a Circular Buffer of 10 `i32` elements
 /// let mut buffer: CircularBuffer<i32> = CircularBuffer::new(10);

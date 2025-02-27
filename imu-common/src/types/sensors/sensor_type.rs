@@ -12,7 +12,7 @@ use uuid::Uuid;
 /// # Examples
 ///
 /// ```
-/// use common::types::sensors::SensorType;
+/// use imu_common::types::sensors::SensorType;
 /// use uuid::Uuid;
 ///
 /// let sensor = SensorType::Accelerometer(Uuid::new_v4());

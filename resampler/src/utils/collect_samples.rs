@@ -1,4 +1,4 @@
-use common::traits::{IMUReadings, IMUSample, IMUUntimedSample};
+use imu_common::traits::{IMUReadings, IMUSample, IMUUntimedSample};
 
 pub(crate) fn collect_samples<T, S>(sensor_buffer: &mut T, timestamp_secs: f64)
 where
@@ -26,9 +26,9 @@ where
 mod tests {
     use super::*;
     use crate::ResamplerPipeline;
-    use common::traits::IMUReadings;
-    use common::types::sensors::{SensorReadings, SensorType};
-    use common::types::timed::Sample3D;
+    use imu_common::traits::IMUReadings;
+    use imu_common::types::sensors::{SensorReadings, SensorType};
+    use imu_common::types::timed::Sample3D;
     use uuid::Uuid;
 
     #[test]
