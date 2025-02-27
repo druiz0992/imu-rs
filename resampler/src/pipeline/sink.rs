@@ -1,6 +1,5 @@
 use async_trait::async_trait;
-use publisher::listener;
-use publisher::AsyncListener;
+use publisher::{async_listener, AsyncListener};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -23,7 +22,7 @@ where
         source: &dyn IMUSource<T, S>,
         sensor_cluster: &[SensorType],
     ) -> Result<Vec<Uuid>, String> {
-        let mut listener = listener!(self.process_samples);
+        let mut listener = async_listener!(self.process_samples);
         let mut ids = Vec::with_capacity(sensor_cluster.len());
         for sensor_type in sensor_cluster {
             if let Ok(id) = source.register_listener(&mut listener, sensor_type).await {

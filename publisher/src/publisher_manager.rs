@@ -19,8 +19,7 @@ use common::traits::publisher::Notifiable;
 /// ```rust
 /// use uuid::Uuid;
 /// use publisher::PublisherManager;
-/// use publisher::listener;
-/// use publisher::listener::AsyncListener;
+/// use publisher::{listener, Listener};
 /// use common::types::sensors::SensorType;
 /// use common::types::timed::Sample3D;
 /// use std::sync::Arc;
@@ -127,9 +126,9 @@ where
         Err("AsyncListener Id not found".to_string())
     }
 
-    pub async fn notify_listeners(&self, publisher_type: S, data: Arc<T>) {
+    pub fn notify_listeners(&self, publisher_type: S, data: Arc<T>) {
         if let Some(publisher) = self.publishers.get(&publisher_type) {
-            publisher.notify_listeners(data).await;
+            publisher.notify_listeners(data);
         }
     }
 
@@ -145,8 +144,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::listener;
-    use crate::AsyncListener;
+    use crate::{listener, Listener};
     use common::types::sensors::SensorType;
     use common::types::timed::Sample3D;
 
@@ -158,7 +156,7 @@ mod tests {
             Self
         }
 
-        async fn handle(&self, _id: Uuid, samples: Arc<Vec<Sample3D>>) {
+        fn handle(&self, _id: Uuid, samples: Arc<Vec<Sample3D>>) {
             println!("Samples: {:?}", samples);
         }
     }

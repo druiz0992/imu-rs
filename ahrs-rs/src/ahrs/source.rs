@@ -34,6 +34,6 @@ impl IMUSource<SensorReadings<SampleQuaternion>, SampleQuaternion> for AHRSFilte
         sensor_type: SensorType,
         data: Arc<SensorReadings<SampleQuaternion>>,
     ) {
-        self.publishers.notify_listeners(sensor_type, data).await
+        self.publishers.notify_listeners(sensor_type, data);
     }
 }

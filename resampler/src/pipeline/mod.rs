@@ -121,7 +121,7 @@ mod tests {
     use common::traits::Notifiable;
     use common::types::sensors::SensorReadings;
     use common::types::timed::Sample3D;
-    use publisher::{listener, AsyncListener};
+    use publisher::{async_listener, AsyncListener};
     use tokio::time::timeout;
     use uuid::Uuid;
 
@@ -168,9 +168,9 @@ mod tests {
             "test",
             sensor_cluster,
         ));
-        let listener = listener!(pipeline.process_samples);
+        let listener = async_listener!(pipeline.process_samples);
 
-        //let listener = listener!(resampler.handle);
+        //let listener = async_listener!(resampler.handle);
         let callback = listener.get_async_callback();
         let buffer = pipeline
             .buffer

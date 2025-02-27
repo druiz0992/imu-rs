@@ -1,11 +1,9 @@
-use async_trait::async_trait;
 use gnuplot::PlotOption::LineWidth;
 use gnuplot::{AxesCommon, Caption, Color, Figure};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use common::traits::{IMUReadings, IMUSample, IMUSink, IMUSource};
@@ -13,8 +11,7 @@ use common::types::buffers::CircularBuffer;
 use common::types::clock::Clock;
 use common::types::sensors::{SensorReadings, SensorType};
 use common::types::timed::Sample3D;
-use publisher::listener;
-use publisher::AsyncListener;
+use publisher::{listener, Listener};
 
 type PlotDataVec = (
     CircularBuffer<f64>,
@@ -109,9 +106,9 @@ impl PlotManager {
 pub struct Plot1D(Arc<Mutex<PlotManager>>);
 
 impl Plot1D {
-    pub async fn new(tag: &str, sensor_cluster: Vec<SensorType>, window_size: usize) -> Self {
+    pub fn new(tag: &str, sensor_cluster: Vec<SensorType>, window_size: usize) -> Self {
         let pm = PlotManager::new(tag, sensor_cluster.clone(), window_size);
-        let mut pm_locked = pm.lock().await;
+        let mut pm_locked = pm.lock().unwrap();
 
         for sensor_type in &sensor_cluster {
             pm_locked.add_plot(sensor_type);
@@ -128,7 +125,7 @@ impl Plot1D {
             let period = Duration::from_secs_f64(refresh_period_millis / 1000.0);
             loop {
                 let start_time = Instant::now();
-                let mut plot = plot_manager.blocking_lock();
+                let mut plot = plot_manager.lock().unwrap();
                 plot.update();
                 drop(plot);
 
@@ -148,9 +145,9 @@ impl Plot1D {
 fn secs_to_t_val(timestamp_secs: f64, base_time: f64) -> f64 {
     f64::max(0.0, timestamp_secs - base_time)
 }
-#[async_trait]
+
 impl IMUSink<SensorReadings<Sample3D>, Sample3D> for Plot1D {
-    async fn attach_listeners(
+    fn attach_listeners(
         &self,
         source: &dyn IMUSource<SensorReadings<Sample3D>, Sample3D>,
         sensor_cluster: &[SensorType],
@@ -158,7 +155,7 @@ impl IMUSink<SensorReadings<Sample3D>, Sample3D> for Plot1D {
         let mut listener = listener!(self.process_samples);
         let mut ids = Vec::with_capacity(sensor_cluster.len());
         for sensor_type in sensor_cluster {
-            match source.register_listener(&mut listener, sensor_type).await {
+            match source.register_listener(&mut listener, sensor_type) {
                 Ok(id) => {
                     ids.push(id);
                 }
@@ -167,7 +164,7 @@ impl IMUSink<SensorReadings<Sample3D>, Sample3D> for Plot1D {
         }
         return Ok(ids);
     }
-    async fn detach_listener(
+    fn detach_listener(
         &self,
         _source: &dyn IMUSource<SensorReadings<Sample3D>, Sample3D>,
         _id: Uuid,
@@ -175,10 +172,10 @@ impl IMUSink<SensorReadings<Sample3D>, Sample3D> for Plot1D {
         todo!();
     }
 
-    async fn process_samples(&self, _listener_id: Uuid, samples: Arc<SensorReadings<Sample3D>>) {
+    fn process_samples(&self, _listener_id: Uuid, samples: Arc<SensorReadings<Sample3D>>) {
         let sensor_type = samples.get_sensor_type();
         if let Some(samples) = samples.get_samples().last() {
-            let mut plot = self.0.lock().await;
+            let mut plot = self.0.lock().unwrap();
             let timestamp = samples.get_timestamp_secs();
             let [x_val, y_val, z_val] = samples.get_measurement().inner();
             let t_val = secs_to_t_val(timestamp, plot.start_time);

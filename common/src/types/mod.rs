@@ -7,7 +7,7 @@ pub mod timed;
 pub mod untimed;
 
 pub use crate::types::buffers::{CircularBuffer, CircularReader};
-pub use crate::types::callback::{AsyncCallback, Callback};
+pub use crate::types::callback::Callback;
 pub use crate::types::clock::Clock;
 pub use crate::types::filters::{MovingAverage, WeightedAverage};
 pub use crate::types::sensors::{SensorReadings, SensorTag, SensorType};

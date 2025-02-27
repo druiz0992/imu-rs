@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use nalgebra::Vector3;
-use publisher::listener;
-use publisher::AsyncListener;
+use publisher::{async_listener, AsyncListener};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -21,7 +20,7 @@ where
         source: &dyn IMUSource<T, Sample3D>,
         sensor_cluster: &[SensorType],
     ) -> Result<Vec<Uuid>, String> {
-        let mut listener = listener!(self.process_samples);
+        let mut listener = async_listener!(self.process_samples);
         let mut ids = Vec::with_capacity(sensor_cluster.len());
         for sensor_type in sensor_cluster {
             if let Ok(id) = source.register_listener(&mut listener, sensor_type).await {
@@ -53,8 +52,7 @@ where
                 if ahrs_lock.n_samples > DISCARD_N_INITIAL_SAMPLES {
                     readings.add_sample(q.clone());
                     self.publishers
-                        .notify_listeners(self.new_measurement.clone(), Arc::new(readings))
-                        .await;
+                        .notify_listeners(self.new_measurement.clone(), Arc::new(readings));
                 }
             }
             drop(ahrs_lock);

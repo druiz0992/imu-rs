@@ -38,6 +38,6 @@ where
     }
 
     async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<T>) {
-        self.publishers.notify_listeners(sensor_type, data).await
+        self.publishers.notify_listeners(sensor_type, data);
     }
 }

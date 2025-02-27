@@ -43,7 +43,7 @@ In order to use the library, you need to install Phyphox App on your phone, and 
             source: &dyn IMUSource<SensorReadings<Sample3D>, Sample3D>,
             sensor_type: &SensorType,
         ) -> Result<Uuid, String> {
-            let mut listener = listener!(self.process_samples);
+            let mut listener = async_listener!(self.process_samples);
             match source.register_listener(&mut listener, sensor_type).await {
                 Ok(id) => {
                     let mut control = self.control.write().await;

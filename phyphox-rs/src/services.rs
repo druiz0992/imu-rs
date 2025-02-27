@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use log::error;
 use publisher::PublisherManager;
 use std::sync::Arc;
@@ -64,24 +63,23 @@ where
     }
 }
 
-#[async_trait]
 impl<C> IMUSource<SensorReadings<Sample3D>, Sample3D> for PhyphoxService<C>
 where
     C: PhyphoxPort + Send + Sync,
 {
-    async fn get_available_sensors(&self) -> Result<Vec<SensorType>, String> {
-        self.client.get_available_sensors().await
+    fn get_available_sensors(&self) -> Vec<SensorType> {
+        self.client.get_sensor_cluster()
     }
 
     fn get_tag(&self) -> &str {
         self.client.get_tag()
     }
 
-    async fn unregister_listener(&self, id: Uuid) {
+    fn unregister_listener(&self, id: Uuid) {
         let _ = self.publishers.remove_listener(id);
     }
 
-    async fn register_listener(
+    fn register_listener(
         &self,
         listener: &mut dyn Notifiable<SensorReadings<Sample3D>>,
         sensor_type: &SensorType,
@@ -89,8 +87,8 @@ where
         self.publishers.add_listener(listener, sensor_type)
     }
 
-    async fn notify_listeners(&self, sensor_type: SensorType, data: Arc<SensorReadings<Sample3D>>) {
-        self.publishers.notify_listeners(sensor_type, data).await
+    fn notify_listeners(&self, sensor_type: SensorType, data: Arc<SensorReadings<Sample3D>>) {
+        self.publishers.notify_listeners(sensor_type, data);
     }
 }
 
