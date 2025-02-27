@@ -4,14 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio.workspace = true
 log.workspace = true
 env_logger.workspace = true
 uuid.workspace = true
-async-trait.workspace = true
 dashmap.workspace = true
 
 publisher = { path = "../publisher"}
 phyphox_rs = { path = "../phyphox-rs"}
 common = { path = "../common"}
 test_utils = { path = "../test-utils"}
+
+[dev-dependencies]
+tokio.workspace = true
