@@ -13,3 +13,6 @@ log = "0.4"
 env_logger = "0.10"
 nalgebra = { version = "0.33.2", features = ["serde-serialize"] }
 dashmap = "6.1.0"
+
+[workspace.features]
+serde-serialize = ["imu_common/serde-serialize"]
