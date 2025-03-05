@@ -1,5 +1,10 @@
 use nalgebra::UnitQuaternion as NUnitQuaternion;
 
+#[cfg(any(feature = "serde-serialize", test))]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(any(feature = "serde-serialize", test))]
+use serde_json::Value;
+
 use crate::traits::IMUUntimedSample;
 
 pub(crate) const W_QUATERNION_COORD_IDX: usize = 0;
@@ -82,10 +87,79 @@ impl TryFrom<Vec<f64>> for UnitQuaternion {
     }
 }
 
+#[cfg(any(feature = "serde-serialize", test))]
+impl Serialize for UnitQuaternion {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let vec = self.0;
+        let json = serde_json::json!({
+            "w": vec.w,
+            "i": vec.i,
+            "j": vec.j,
+            "k": vec.k,
+        });
+        json.serialize(serializer)
+    }
+}
+
+#[cfg(any(feature = "serde-serialize", test))]
+impl<'de> Deserialize<'de> for UnitQuaternion {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Deserialize into a Value (serde_json::Value)
+        let value: Value = Value::deserialize(deserializer)?;
+
+        // Handle array format [f64, f64, f64, f64]
+        if let Some(arr) = value.as_array() {
+            if arr.len() == N_QUATERNION_COORDINATES {
+                let w = arr[W_QUATERNION_COORD_IDX].as_f64().unwrap_or_default();
+                let i = arr[X_QUATERNION_COORD_IDX].as_f64().unwrap_or_default();
+                let j = arr[Y_QUATERNION_COORD_IDX].as_f64().unwrap_or_default();
+                let k = arr[Z_QUATERNION_COORD_IDX].as_f64().unwrap_or_default();
+                return Ok(UnitQuaternion::new([w, i, j, k]));
+            }
+        }
+
+        // Handle object format {"w": f64, "i": f64, "j": f64, "k": f64}
+        if let Some(obj) = value.as_object() {
+            let w = obj.get("w").and_then(Value::as_f64).unwrap_or_default();
+            let i = obj.get("i").and_then(Value::as_f64).unwrap_or_default();
+            let j = obj.get("j").and_then(Value::as_f64).unwrap_or_default();
+            let k = obj.get("k").and_then(Value::as_f64).unwrap_or_default();
+            return Ok(UnitQuaternion::new([w, i, j, k]));
+        }
+
+        // Handle string format "0.0, 1.0, 2.0, 3.2" (comma-separated values)
+        if let Some(scalar_str) = value.as_str() {
+            let parts: Vec<f64> = scalar_str
+                .split(',')
+                .filter_map(|s| s.trim().parse().ok())
+                .collect();
+            if parts.len() == N_QUATERNION_COORDINATES {
+                return Ok(UnitQuaternion::new([
+                    parts[W_QUATERNION_COORD_IDX],
+                    parts[X_QUATERNION_COORD_IDX],
+                    parts[Y_QUATERNION_COORD_IDX],
+                    parts[Z_QUATERNION_COORD_IDX],
+                ]));
+            }
+        }
+
+        // Fallback to a default value if nothing else matches
+        Ok(UnitQuaternion::default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use nalgebra::{Quaternion, UnitQuaternion as NUnitQuaternion};
+    #[cfg(any(feature = "serde-serialize", test))]
+    use serde_json;
 
     #[test]
     fn test_unit_quaternion_new() {
@@ -188,5 +262,45 @@ mod tests {
         let data = vec![1.0, 0.0, 0.0];
         let result = UnitQuaternion::try_from(data);
         assert!(result.is_err());
+    }
+
+    #[cfg(any(feature = "serde-serialize", test))]
+    #[test]
+    fn test_serialize() {
+        let q = UnitQuaternion::new([1.0, 0.0, 0.0, 0.0]);
+        let serialized = serde_json::to_string(&q).unwrap();
+        assert_eq!(serialized, r#"{"i":0.0,"j":0.0,"k":0.0,"w":1.0}"#);
+    }
+    #[cfg(any(feature = "serde-serialize", test))]
+    #[test]
+    fn test_deserialize() {
+        let data = r#"{"w": 1.0, "i":0.0,"j":0.0, "k":0.0}"#;
+        let q: UnitQuaternion = serde_json::from_str(data).unwrap();
+        assert_eq!(
+            q.inner(),
+            nalgebra::UnitQuaternion::new_unchecked(Quaternion::new(1.0, 0.0, 0.0, 0.0))
+        );
+    }
+
+    #[cfg(any(feature = "serde-serialize", test))]
+    #[test]
+    fn test_deserialize_missing_fields() {
+        let data = r#"{"w": 1.0, "j":0.0, "k":0.0}"#;
+        let q: UnitQuaternion = serde_json::from_str(data).unwrap();
+        assert_eq!(
+            q.inner(),
+            nalgebra::UnitQuaternion::new_unchecked(Quaternion::new(1.0, 0.0, 0.0, 0.0))
+        );
+    }
+
+    #[cfg(any(feature = "serde-serialize", test))]
+    #[test]
+    fn test_deserialize_missing_labels() {
+        let data = r#""1.0, 0.0, 0.0, 0.0""#;
+        let q: UnitQuaternion = serde_json::from_str(data).unwrap();
+        assert_eq!(
+            q.inner(),
+            nalgebra::UnitQuaternion::new_unchecked(Quaternion::new(1.0, 0.0, 0.0, 0.0))
+        );
     }
 }
