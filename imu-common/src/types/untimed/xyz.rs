@@ -156,6 +156,13 @@ impl<'de> Deserialize<'de> for XYZ {
                 .split(',')
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
+            let parts = if parts.len() < 3 {
+                let mut parts = parts;
+                parts.resize(3, 0.0); // Resize to 3, filling missing values with 0.0
+                parts
+            } else {
+                parts
+            };
             if parts.len() == 3 {
                 return Ok(XYZ(Vector3::new(parts[0], parts[1], parts[2])));
             }
@@ -269,5 +276,13 @@ mod tests {
         let data = r#""1.0,   2.0,3.0""#;
         let xyz: XYZ = serde_json::from_str(data).unwrap();
         assert_eq!(xyz.inner(), [1.0, 2.0, 3.0]);
+    }
+
+    #[cfg(any(feature = "serde-serialize", test))]
+    #[test]
+    fn test_deserialize_missing_labels_and_fieldst() {
+        let data = r#""1.0,   3.0""#;
+        let xyz: XYZ = serde_json::from_str(data).unwrap();
+        assert_eq!(xyz.inner(), [1.0, 3.0, 0.0]);
     }
 }

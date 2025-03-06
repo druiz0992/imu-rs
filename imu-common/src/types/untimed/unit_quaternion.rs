@@ -139,6 +139,13 @@ impl<'de> Deserialize<'de> for UnitQuaternion {
                 .split(',')
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
+            let parts = if parts.len() < N_QUATERNION_COORDINATES {
+                let mut parts = parts;
+                parts.resize(N_QUATERNION_COORDINATES, 0.0); // Resize to 3, filling missing values with 0.0
+                parts
+            } else {
+                parts
+            };
             if parts.len() == N_QUATERNION_COORDINATES {
                 return Ok(UnitQuaternion::new([
                     parts[W_QUATERNION_COORD_IDX],
@@ -297,6 +304,17 @@ mod tests {
     #[test]
     fn test_deserialize_missing_labels() {
         let data = r#""1.0, 0.0, 0.0, 0.0""#;
+        let q: UnitQuaternion = serde_json::from_str(data).unwrap();
+        assert_eq!(
+            q.inner(),
+            nalgebra::UnitQuaternion::new_unchecked(Quaternion::new(1.0, 0.0, 0.0, 0.0))
+        );
+    }
+
+    #[cfg(any(feature = "serde-serialize", test))]
+    #[test]
+    fn test_deserialize_missing_labels_and_fields() {
+        let data = r#""1.0, 0.0, 0.0""#;
         let q: UnitQuaternion = serde_json::from_str(data).unwrap();
         assert_eq!(
             q.inner(),
