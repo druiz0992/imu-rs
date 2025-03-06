@@ -128,6 +128,13 @@ impl<'de> Deserialize<'de> for Sample3D {
                 .split(',')
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
+            let parts = if parts.len() < 4 {
+                let mut parts = parts;
+                parts.resize(4, 0.0); // Resize to 3, filling missing values with 0.0
+                parts
+            } else {
+                parts
+            };
 
             // We expect exactly 4 values (timestamp + 3 values for XYZ)
             if parts.len() == 4 {
@@ -223,6 +230,16 @@ mod tests {
 
         assert_eq!(sample.timestamp, 1627846267.0);
         assert_eq!(sample.get_measurement(), XYZ::from([1.0, 2.0, 3.0]));
+    }
+
+    #[cfg(any(feature = "serde-serialize", test))]
+    #[test]
+    fn test_sample_deserialize_no_labels_missing_samples() {
+        let data = r#""1627846267.0,1.0, 3.0""#;
+        let sample: Sample3D = serde_json::from_str(data).unwrap();
+
+        assert_eq!(sample.timestamp, 1627846267.0);
+        assert_eq!(sample.get_measurement(), XYZ::from([1.0, 3.0, 0.0]));
     }
 
     #[test]

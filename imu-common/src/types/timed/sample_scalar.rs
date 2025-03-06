@@ -105,6 +105,13 @@ impl<'de> Deserialize<'de> for SampleScalar {
                 .split(',')
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
+            let parts = if parts.len() < 2 {
+                let mut parts = parts;
+                parts.resize(2, 0.0); // Resize to 3, filling missing values with 0.0
+                parts
+            } else {
+                parts
+            };
 
             // We expect exactly 2 values (timestamp + 1 values for Scalar)
             if parts.len() == 2 {
@@ -204,5 +211,15 @@ mod tests {
         let deserialized: SampleScalar = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.get_timestamp_secs(), timestamp);
         assert_eq!(deserialized.get_measurement(), measurement);
+    }
+
+    #[cfg(any(feature = "serde-serialize", test))]
+    #[test]
+    fn test_sample_scalar_deserialize_no_labels() {
+        let data = r#""1627846267.0,1.0""#;
+        let sample: SampleScalar = serde_json::from_str(data).unwrap();
+
+        assert_eq!(sample.timestamp, 1627846267.0);
+        assert_eq!(sample.get_measurement(), Scalar::new(1.0));
     }
 }

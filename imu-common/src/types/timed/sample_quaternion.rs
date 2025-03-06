@@ -127,6 +127,13 @@ impl<'de> Deserialize<'de> for SampleQuaternion {
                 .split(',')
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
+            let parts = if parts.len() < 5 {
+                let mut parts = parts;
+                parts.resize(5, 0.0); // Resize to 3, filling missing values with 0.0
+                parts
+            } else {
+                parts
+            };
 
             // We expect exactly 5 values (timestamp + 4 values for UnitQuaternion)
             if parts.len() == 5 {
@@ -272,6 +279,19 @@ mod tests {
     #[test]
     fn test_sample_deserialize_no_labels() {
         let data = r#""1627846267.0,1.0, 0.0, 0.0,0.0""#;
+        let sample: SampleQuaternion = serde_json::from_str(data).unwrap();
+
+        assert_eq!(sample.timestamp, 1627846267.0);
+        assert_eq!(
+            sample.get_measurement(),
+            UnitQuaternion::from([1.0, 0.0, 0.0, 0.0])
+        );
+    }
+
+    #[cfg(any(feature = "serde-serialize", test))]
+    #[test]
+    fn test_sample_deserialize_no_labels_missing_samples() {
+        let data = r#""1627846267.0,1.0, 0.0, 0.0""#;
         let sample: SampleQuaternion = serde_json::from_str(data).unwrap();
 
         assert_eq!(sample.timestamp, 1627846267.0);
